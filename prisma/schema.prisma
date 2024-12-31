@@ -14,10 +14,12 @@ datasource db {
 }
 
 model User {
-  id        String   @id
-  email     String   @unique
+  id        Int @id @default(autoincrement())  
+  uname     String 
+  email     String   
   phone     String
-  birthday  DateTime
-  Location  String
-  Questions String
+  birthday  String
+  time      String
+  location  String
+  questions String
 }
