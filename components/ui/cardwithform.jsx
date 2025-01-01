@@ -1,4 +1,4 @@
-'use client'
+
 import * as React from "react"
 import { addUser } from "@/actions"
 import { prisma } from "@prisma/client"
@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
 
 export function CardWithForm() {
     
@@ -48,7 +49,7 @@ export function CardWithForm() {
         <CardDescription>$325</CardDescription>
       </CardHeader>
       <CardContent>
-        <form>
+        <form onSubmit={handleSubmit}>
           <div className="grid w-full items-center gap-4">
             <div className="flex flex-col space-y-1.5">
               <Label htmlFor="uname">Name</Label>
@@ -76,7 +77,7 @@ export function CardWithForm() {
             </div>
             <div className="flex flex-col space-y-1.5">
               <Label htmlFor="questions">What topics are you interested in?</Label>
-              <textarea id="questions" name="questions" ></textarea> 
+              <Textarea id="questions" name="questions" ></Textarea> 
             </div>
           </div>
         </form>
