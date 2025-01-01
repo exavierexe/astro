@@ -64,11 +64,11 @@ export function CardWithForm() {
             </div>
             <div className="flex flex-col space-y-1.5">
               <Label htmlFor="birthday">Date of birth</Label>
-              <Input id="birthday" name="birthday" placeholder="12:00 am" />
+              <Input id="birthday" name="birthday" placeholder="MM/DD/YYYY" />
             </div>
             <div className="flex flex-col space-y-1.5">
               <Label htmlFor="time">Time of birth</Label>
-              <Input id="time" name="time" placeholder="MM/DD/YYYY" />
+              <Input id="time" name="time" placeholder="12:00 pm" />
             </div>
             <div className="flex flex-col space-y-1.5">
               <Label htmlFor="location">Location of birth</Label>
