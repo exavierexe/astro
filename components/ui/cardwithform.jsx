@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 
-export function CardWithForm() {
+export async function CardWithForm() {
     
   function handleSubmit(){
     console.log(document.getElementById('uname').value);
