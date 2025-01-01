@@ -1,4 +1,4 @@
-
+"use server";
 import * as React from "react"
 import { addUser } from "@/actions"
 import { prisma } from "@prisma/client"
@@ -83,7 +83,7 @@ export function CardWithForm() {
         </form>
       </CardContent>
       <CardFooter className="flex flex-col space-y-1.5">
-        <Button onClick={handleSubmit} >Submit</Button>
+        <Button>Submit</Button>
       </CardFooter>
     </Card>
   )
