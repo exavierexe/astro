@@ -1,7 +1,6 @@
 "use client";
 import * as React from "react"
-import { addUser } from "@/actions"
-import { prisma } from "@prisma/client"
+
 
 
 import { Button } from "@/components/ui/button"
