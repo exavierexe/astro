@@ -11,16 +11,26 @@ import prisma from "./lib/prisma";
    // return data;
 //}
 
-export const addUser = async (uname: string, phone: string, email: string, birthday: string, time: string, location: string, questions: string) => {
-    return await prisma.user.create({
+export const addUser = async (formData: FormData) => {
+    const uname = formData.get("uname") as string;
+    const phone = formData.get("phone") as string;
+    const email = formData.get("email") as string;
+    const birthday = formData.get("birthday") as string;
+    const time = formData.get("time") as string;
+    const location = formData.get("location") as string;
+    const questions = formData.get("questions") as string;
+    
+    await prisma.user.create({
       data: {
-        uname,
-        phone,
-        email,
-        birthday,
-        time,
-        location,
-        questions
+        uname: uname as string,
+        phone: phone as string,
+        email: email as string,
+        birthday: birthday as string,
+        time: time as string,
+        location: location as string,
+        questions: questions as string
       },
     });
+    
+
   };

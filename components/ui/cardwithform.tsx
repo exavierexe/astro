@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 
-export async function CardWithForm() {
+export function CardWithForm() {
   
   
     
