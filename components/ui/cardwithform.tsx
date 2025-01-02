@@ -1,4 +1,4 @@
-"use server";
+"use client";
 import * as React from "react"
 import { addUser } from "@/actions"
 import { prisma } from "@prisma/client"
@@ -25,16 +25,9 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 
 export async function CardWithForm() {
+  
+  
     
-  function handleSubmit(){
-    console.log(document.getElementById('uname').value);
-    addUser( document.getElementById('uname').value,
-        document.getElementById('phone').value,
-        document.getElementById('email').value,
-        document.getElementById('birthday').value,
-        document.getElementById('time').value,
-        document.getElementById('location').value,
-        document.getElementById('questions').value )}
         
           
         
@@ -49,7 +42,7 @@ export async function CardWithForm() {
         <CardDescription>$325</CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit}>
+        
           <div className="grid w-full items-center gap-4">
             <div className="flex flex-col space-y-1.5">
               <Label htmlFor="uname">Name</Label>
@@ -79,11 +72,13 @@ export async function CardWithForm() {
               <Label htmlFor="questions">What topics are you interested in?</Label>
               <Textarea id="questions" name="questions" ></Textarea> 
             </div>
+            <div className="flex flex-col space-y-1.5">
+              <Button type="submit">Submit</Button>
+              </div>
           </div>
-        </form>
+        
       </CardContent>
       <CardFooter className="flex flex-col space-y-1.5">
-        <Button>Submit</Button>
       </CardFooter>
     </Card>
   )
