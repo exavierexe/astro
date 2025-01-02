@@ -7,8 +7,14 @@ export default async function Home() {
 
   async function handleSubmit(formdata: FormData) {
     "use server";
-    addUser(formdata.get("uname"), formdata.get("phone"), formdata.get("email"), formdata.get("birthday"), formdata.get("time"), formdata.get("location"), formdata.get("questions"))
-  }
+    const uname = formdata.get("uname") as string;
+    const phone = formdata.get("phone") as string;
+    const email = formdata.get("email") as string;
+    const birthday = formdata.get("birthday") as string;
+    const time = formdata.get("time") as string;
+    const location = formdata.get("location") as string;
+    const questions = formdata.get("questions") as string;
+    addUser(uname, phone, email, birthday, time, location, questions) }
 
   return (
     <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
