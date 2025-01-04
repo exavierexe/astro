@@ -1,5 +1,5 @@
 import Image from "next/image";
-
+import { NavBar } from "@/components/ui/navbar";
 import { addUser } from "@/actions";
 import { Button } from "@/components/ui/button";
 import { CardWithForm } from "@/components/ui/cardwithform"
