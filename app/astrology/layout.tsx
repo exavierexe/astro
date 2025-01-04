@@ -26,7 +26,7 @@ export default function AstrologyLayout({
   return (
     <>
         <div>
-          <NavBar/>
+          
         </div>
         {children}
     </>

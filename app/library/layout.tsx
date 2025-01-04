@@ -26,7 +26,7 @@ export default function LibraryLayout({
   return (
     <>
         <div>
-          <NavBar/>
+          
         </div>
         {children}
      </>

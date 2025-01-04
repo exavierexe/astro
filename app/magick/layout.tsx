@@ -26,7 +26,7 @@ export default function MagickLayout({
   return (
     <>
         <div>
-          <NavBar/>
+          
         </div>
         {children}
       </>

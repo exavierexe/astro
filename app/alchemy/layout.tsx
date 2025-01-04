@@ -26,7 +26,7 @@ export default function AlchemyLayout({
   return (
     <>
         <div>
-          <NavBar/>
+          
         </div>
         {children}
     </>

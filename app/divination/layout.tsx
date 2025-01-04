@@ -26,7 +26,7 @@ export default function TarotLayout({
   return (
     <>
         <div>
-          <NavBar/>
+         
         </div>
         {children}
       </>
