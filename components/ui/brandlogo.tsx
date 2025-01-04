@@ -1,10 +1,12 @@
-
+import Image from "next/image"
 
 export function BrandLogo() {
     return (
+        
         <span className="flex items-center gap-2 font-semibold flex-shrink-0 text-lg">
-            <img src="/favicon.ico" className="size-8" />
-            <span>Exavier's School</span>
+            <Image alt="" src="/favicon.ico" className="size-8"/>
+            <span>Exavier&apos;s School</span>
         </span>
+        
     )
 }
