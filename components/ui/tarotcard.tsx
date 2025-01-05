@@ -73,14 +73,14 @@ export function TarotCard() {
         tarot55];
     
     function Draw() {
-        const randomNumber = Math.floor(Math.random() * 56);
+        const randomNumber = Math.floor(Math.random() * 55) + 1;
         const tarot = cards[randomNumber];
         setTarotcard(tarot);
         
     }
 
     return (
-    <Card>
+    <Card className="bg-white light">
         <CardContent className="justify-items-center">
             <Image src={tarotcard} alt="" width="330" height="680" className="mb-5 mt-5 rounded-lg"/>
             <Button onClick={Draw}>Draw Card</Button>
