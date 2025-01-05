@@ -80,7 +80,7 @@ export function TarotCard() {
     }
 
     return (
-    <Card className="bg-white light">
+    <Card className="">
         <CardContent className="justify-items-center">
             <Image src={tarotcard} alt="" width="330" height="680" className="mb-5 mt-5 rounded-lg"/>
             <Button onClick={Draw}>Draw Card</Button>
