@@ -1,6 +1,6 @@
 import { BrandLogo } from "./brandlogo"
 import Link from "next/link" 
-import { SignedIn, SignedOut, SignInButton  } from "@clerk/nextjs"
+import { SignedIn, SignedOut, SignInButton, SignOutButton  } from "@clerk/nextjs"
 
 
 
@@ -31,6 +31,9 @@ export function NavBar() {
             <SignedOut>
                 <SignInButton>Login</SignInButton>
             </SignedOut>
+            <SignedIn>
+                <SignOutButton>Logout</SignOutButton>
+            </SignedIn>
             </span>
 
         </nav>
