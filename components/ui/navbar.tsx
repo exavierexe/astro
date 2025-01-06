@@ -30,6 +30,7 @@ export function NavBar() {
             <span className="text-lg">
             <SignedIn>
                 <Link href="">Space</Link>
+                <Link href="">Time</Link>
             </SignedIn>
             <SignedOut>
                 <SignInButton>Login</SignInButton>
