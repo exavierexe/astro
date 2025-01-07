@@ -38,7 +38,7 @@ export function CardWithForm() {
     <Card className="w-[350px]">
       <CardHeader>
         <CardTitle>Get a birth chart reading</CardTitle>
-        <CardDescription>$325</CardDescription>
+        <CardDescription></CardDescription>
       </CardHeader>
       <CardContent>
         
