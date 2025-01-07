@@ -151,8 +151,8 @@ export function TarotCard() {
         </CardContent>
     </Card>
     <br/>
-    <div>
-    <p className="text-wrap text-balance text-pretty max-w-65 col-span-1">
+    <div className="w-80 justify-items-center">
+    <p>
         {description}
     </p>
     </div>
