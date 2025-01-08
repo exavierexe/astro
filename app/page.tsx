@@ -20,13 +20,6 @@ export default function Home() {
         </SignUpButton>
         </section>
       </main>
-      <section className="min-h-screen flex items-center row-span-2 justify-center text-center text-balance flex-col gap-8 px-9">
-          
-        <form action={addUser}>
-        <CardWithForm></CardWithForm>
-        </form>
-        
-        </section>
       <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
         
       </footer>
