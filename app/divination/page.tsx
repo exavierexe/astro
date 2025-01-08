@@ -7,7 +7,7 @@ export default function Divination() {
   return (
     <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
       <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-     <div className="grid grid-cols-3 gap-4 md:shrink-0 md:grid-cols-1">  
+     <div className="grid lg:grid-cols-3 gap-4 sm:shrink-0 sm:grid-cols-1">  
     <TarotCard></TarotCard>
     <TarotCard></TarotCard>
     <TarotCard></TarotCard>
