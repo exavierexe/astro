@@ -42,7 +42,7 @@ export default function RootLayout({
         
           <div>
             <Link href="https://discord.gg/MgnVnJNYZS"><Button>Join Discord Server</Button></Link>
-            </div>
+          </div>
        
       </body>
     </html>
