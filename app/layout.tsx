@@ -40,7 +40,10 @@ export default function RootLayout({
         </div>
         {children}
         
-         
+        <div>
+            <Link href="https://discord.gg/MgnVnJNYZS"><Button>Join Discord Server</Button></Link>
+          </div>
+       
       </body>
     </html>
     </ClerkProvider>

@@ -28,7 +28,7 @@ export default function Astrology() {
       <div>
         <h1>General Reading</h1>
         <p>Do you want some general insights about your day to day life and the near future? 
-          Maybe you're new to astrology and wondering how much it can reveal about yourself. 
+          Maybe you are new to astrology and wondering how much it can reveal about yourself. 
           This reading will satisfy your curiosity and give you a lot to explore.</p>
       </div>
       <Image src={cityscape} alt="Cityscape" width={500} height={500} className="mb-5 mt-5 rounded-lg"/>
@@ -42,7 +42,7 @@ export default function Astrology() {
           Maybe you already have multiple options and cant decide which person to choose? 
           Are you looking to understand your spouse and overcome challenges?
           This is reading will help you make informed decisions in your relationships and create a social life of abundance. 
-          It's also possible to predict the exact days that you are most likely to get married.
+          It is also possible to predict the exact days that you are most likely to get married.
           </p>
       </div>
       <Image src={venusbeach} alt="venus beach" width={500} height={500} className="mb-5 mt-5 rounded-lg"/>
@@ -74,7 +74,7 @@ export default function Astrology() {
         <CardContent>
           <div className="text-left">
           This reading is intended for mature audiences. <br/> <br/>
-          If you want answers about your soul's journey or your experiences with the supernatural, this reading is for you. <br/> <br/>
+          If you want answers about your soul&apos;s journey or your experiences with the supernatural, this reading is for you. <br/> <br/>
           You will get this most out of this if you possess a form of intuition or at least have an understanding of the occult, mythology, and religion. <br/> <br/>
           This will detail the archetypal forces you have access to and how they influence your life. <br/> <br/>
           You will also learn how to balance these forces with occult practices and create your own mythology. 
