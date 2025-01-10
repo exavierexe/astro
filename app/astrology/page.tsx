@@ -46,6 +46,7 @@ export default function Astrology() {
       <Card>
         <CardHeader className="text-4xl">Love Reading and Marriage Prediction</CardHeader>
         <CardFooter className="grid grid-cols-1 shrink-0 gap-4 md:grid-cols-2">
+        <Image src={venusbeach} alt="venus beach" width={500} height={500} className="mb-5 mt-5 rounded-lg"/>
         <CardContent>
         <div className="text-left">
           Do you want to know where to find the love of your life and how to attract them? <br/> <br/>
@@ -55,7 +56,7 @@ export default function Astrology() {
           It is also possible to predict the exact days that you are most likely to get married.
         </div>
       </CardContent>
-      <Image src={venusbeach} alt="venus beach" width={500} height={500} className="mb-5 mt-5 rounded-lg"/>
+     
       </CardFooter>
       </Card>
       </section>
