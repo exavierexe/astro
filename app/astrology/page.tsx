@@ -123,6 +123,52 @@ export default function Astrology() {
       </section>
 
       <section className="min-h-screen flex items-center row-span-2 justify-center text-center text-balance flex-col gap-8 px-9">
+      <Card>
+      <CardHeader className="text-4xl">Pricing Teirs</CardHeader>
+      <CardContent>If your request is approved, you will recieve an invoice prior to the reading. Readings will take place over the phone on whatsapp.</CardContent>
+        <CardFooter className="grid grid-cols-1 shrink-0 gap-4 md:grid-cols-3">
+        <Card>
+        <CardContent>
+          <CardHeader className="text-2xl">Essential - $50</CardHeader>
+          <div className="text-left">
+          15+ minute recorded phone session <br/> <br/>
+          Full report of your house lords and planet aspects, as they relate to your topic <br/> <br/>
+          Major transits for the next 30 days <br/> <br/>
+          3 card tarot spread <br/> <br/>
+          This is a convenient option if you need to straight to the point and make a quick decision. <br/> <br/>
+          </div>
+      </CardContent>
+      </Card>
+      <Card>
+      <CardContent>
+      <CardHeader className="text-2xl">Deluxe - $150</CardHeader>
+          <div className="text-left">
+          45+ minute recorded phone session <br/> <br/>
+          Extended report of house lords, planet aspects, and divisional charts, as they relate to your topic<br/> <br/>
+          Major transits for the next 90 days <br/> <br/>
+          6 card tarot spread <br/> <br/>
+          Select this if you want to go really in depth. You will get all of your questions answered.<br/> <br/>
+          </div>
+      </CardContent>
+      </Card>
+      <Card>
+      <CardContent>
+      <CardHeader className="text-2xl">Ultra - $350</CardHeader>
+
+          <div className="text-left">
+          90+ minute recorded phone sessions x2<br/> <br/>
+          Extended report of house lords, planet aspects, and divisional charts, as they relate to your topic<br/> <br/>
+          Major transits for the next 365 days <br/> <br/>
+          6 card tarot spreads x2<br/> <br/>
+          Your reading will be prioritized.<br/> <br/> <br/>
+          </div>
+      </CardContent>
+      </Card>
+      </CardFooter>
+      </Card>
+      </section>
+
+      <section className="min-h-screen flex items-center row-span-2 justify-center text-center text-balance flex-col gap-8 px-9">
           <form action={addUser}>
           <CardWithForm></CardWithForm>
           </form>
