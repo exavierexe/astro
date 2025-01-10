@@ -23,8 +23,12 @@ export default function Home() {
         
         </section>
       </main>
+      <div className="justify-items-center row-start-4 flex gap-6 flex-wrap items-center justify-center">
+      <Link href="https://discord.gg/zcqkTFRn"><Button>Join Discord</Button></Link>
+      <Link href="https://www.youtube.com/@exavierx"><Button>YouTube</Button></Link>
+        </div>
       <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        
+       
       </footer>
     </div>
   );
