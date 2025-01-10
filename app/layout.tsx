@@ -3,6 +3,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { NavBar } from "@/components/ui/navbar";
 import { ClerkProvider } from "@clerk/nextjs";
+import { Button } from "@/components/ui/button";
+import { Link } from "lucide-react";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -37,6 +39,11 @@ export default function RootLayout({
           <NavBar/>
         </div>
         {children}
+        
+          <div>
+            <Link href="https://discord.gg/MgnVnJNYZS"><Button>Join Discord Server</Button></Link>
+            </div>
+       
       </body>
     </html>
     </ClerkProvider>

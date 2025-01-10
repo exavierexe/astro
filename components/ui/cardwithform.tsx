@@ -37,27 +37,27 @@ export function CardWithForm() {
   return (
     <Card className="w-[350px]">
       <CardHeader>
-        <CardTitle>Get a birth chart reading</CardTitle>
+        <CardTitle>Get a birth chart + tarot reading</CardTitle>
         <CardDescription></CardDescription>
       </CardHeader>
       <CardContent>
-        
+          
           <div className="grid w-full items-center gap-4">
             <div className="flex flex-col space-y-1.5">
               <Label htmlFor="uname">Name</Label>
-              <Input id="uname" name="uname" placeholder=""/>
+              <Input id="uname" name="uname" placeholder="" required/>
             </div>
             <div className="flex flex-col space-y-1.5">
               <Label htmlFor="phone">Phone number</Label>
-              <Input id="phone" name="phone" placeholder="" />
+              <Input id="phone" name="phone" placeholder="" required/>
             </div>
             <div className="flex flex-col space-y-1.5">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" name="email" placeholder="" />
+              <Input id="email" name="email" placeholder="" required/>
             </div>
             <div className="flex flex-col space-y-1.5">
               <Label htmlFor="birthday">Date of birth</Label>
-              <Input id="birthday" name="birthday" placeholder="MM/DD/YYYY" />
+              <Input id="birthday" name="birthday" placeholder="MM/DD/YYYY" required/>
             </div>
             <div className="flex flex-col space-y-1.5">
               <Label htmlFor="time">Time of birth</Label>
@@ -75,6 +75,7 @@ export function CardWithForm() {
               <Button type="submit">Submit</Button>
               </div>
           </div>
+          
         
       </CardContent>
       <CardFooter className="flex flex-col space-y-1.5">
