@@ -135,7 +135,7 @@ export default function Astrology() {
           Full report of your house lords and planet aspects, as they relate to your topic <br/> <br/>
           Major transits for the next 30 days <br/> <br/>
           3 card tarot spread <br/> <br/>
-          This is a convenient option if you need to straight to the point and make a quick decision. <br/> <br/>
+          This is a convenient option if you need to get straight to the point and make a quick decision. <br/> <br/>
           </div>
       </CardContent>
       </Card>
