@@ -25,33 +25,45 @@ export default function Astrology() {
       </main>
 
       <section className="min-h-screen flex items-center row-span-2 justify-center text-center text-balance flex-col gap-8 px-9">
-      <div>
-        <h1>General Reading</h1>
-        <p>Do you want some general insights about your day to day life and the near future? 
-          Maybe you are new to astrology and wondering how much it can reveal about yourself. 
-          This reading will satisfy your curiosity and give you a lot to explore.</p>
-      </div>
+      <Card>
+        <CardHeader className="text-4xl">General Reading</CardHeader>
+        <CardFooter className="grid grid-cols-1 shrink-0 gap-4 md:grid-cols-2">
+        <CardContent>
+        <div className="text-left">
+          Do you want some general insights about your day to day life and the near future? <br/> <br/>
+          Maybe you are new to astrology and wondering how much it can reveal about yourself. <br/> <br/>
+          This reading will satisfy your curiosity and give you a lot to explore. <br/> <br/>
+          This is the best reading for beginners. It focus on the most practical information that you can take advantage of immediately. <br/> <br/>
+          You will recieve a psychoanalysis and a forecast of major events ahead.
+          </div>
+        </CardContent>
       <Image src={cityscape} alt="Cityscape" width={500} height={500} className="mb-5 mt-5 rounded-lg"/>
+      </CardFooter>
+      </Card>
       </section>
 
       <section className="min-h-screen flex items-center row-span-2 justify-center text-center text-balance flex-col gap-8 px-9">
-      <div>
-        <h1>Love Reading and Marriage Prediction</h1>
-        <p>
-          Do you want to know where to find the love of your life and how to attract them?
-          Maybe you already have multiple options and cant decide which person to choose? 
-          Are you looking to understand your spouse and overcome challenges?
-          This is reading will help you make informed decisions in your relationships and create a social life of abundance. 
+      <Card>
+        <CardHeader className="text-4xl">Love Reading and Marriage Prediction</CardHeader>
+        <CardFooter className="grid grid-cols-1 shrink-0 gap-4 md:grid-cols-2">
+        <CardContent>
+        <div className="text-left">
+          Do you want to know where to find the love of your life and how to attract them? <br/> <br/>
+          Maybe you already have multiple options and cant decide which person to choose? <br/> <br/>
+          Are you looking to understand your spouse and overcome challenges? <br/> <br/>
+          This is reading will help you make informed decisions in your relationships and create a social life of abundance. <br/> <br/> 
           It is also possible to predict the exact days that you are most likely to get married.
-          </p>
-      </div>
+        </div>
+      </CardContent>
       <Image src={venusbeach} alt="venus beach" width={500} height={500} className="mb-5 mt-5 rounded-lg"/>
+      </CardFooter>
+      </Card>
       </section>
 
       <section className="min-h-screen flex items-center row-span-2 justify-center text-center text-balance flex-col gap-8 px-9">
       <Card>
       <CardHeader className="text-4xl">Business and Career Reading</CardHeader>
-      <CardFooter>
+      <CardFooter className="grid grid-cols-1 shrink-0 gap-4 md:grid-cols-2">
       <CardContent>
         <div className="text-left">
           Do you want to make more money and find your purpose in life? <br/> <br/>
@@ -69,7 +81,7 @@ export default function Astrology() {
       <section className="min-h-screen flex items-center row-span-2 justify-center text-center text-balance flex-col gap-8 px-9">
       <Card>
       <CardHeader className="text-4xl">Occult Mythical Reading</CardHeader>
-        <CardFooter>
+        <CardFooter className="grid grid-cols-1 shrink-0 gap-4 md:grid-cols-2">
         <Image src={secretscroll} alt="secret scroll" width={500} height={500} className="mb-5 mt-5 rounded-lg"/>
         <CardContent>
           <div className="text-left">
