@@ -22,4 +22,6 @@ model User {
   time      String
   location  String
   questions String
+  rtype String
+  price String
 }

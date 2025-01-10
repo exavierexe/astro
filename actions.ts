@@ -19,6 +19,8 @@ export const addUser = async (formData: FormData) => {
     const time = formData.get("time") as string;
     const location = formData.get("location") as string;
     const questions = formData.get("questions") as string;
+    const rtype = formData.get("rtype") as string;
+    const price = formData.get("price") as string;
     
     await prisma.user.create({
       data: {
@@ -28,7 +30,9 @@ export const addUser = async (formData: FormData) => {
         birthday: birthday as string,
         time: time as string,
         location: location as string,
-        questions: questions as string
+        questions: questions as string,
+        rtype: rtype as string,
+        price: price as string
       },
     });
     

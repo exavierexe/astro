@@ -20,6 +20,8 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  SelectGroup,
+  SelectLabel,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 
@@ -68,7 +70,42 @@ export function CardWithForm() {
               <Input id="location" name="location" placeholder="City, State/District, Country"/>
             </div>
             <div className="flex flex-col space-y-1.5">
-              <Label htmlFor="questions">What topics are you interested in?</Label>
+              <Label htmlFor="rtype">Select a reading</Label>
+              <Select name="rtype">
+              <SelectTrigger className="">
+        <SelectValue placeholder="" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectGroup>
+          <SelectLabel>Readings</SelectLabel>
+          <SelectItem value="General">General</SelectItem>
+          <SelectItem value="Love">Love</SelectItem>
+          <SelectItem value="Business">Business</SelectItem>
+          <SelectItem value="Occult">Occult</SelectItem>
+          <SelectItem value="Health">Health</SelectItem>
+        </SelectGroup>
+      </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col space-y-1.5">
+              <Label htmlFor="price">Select a price teir</Label>
+              <Select name="price">
+              <SelectTrigger className="">
+        <SelectValue placeholder="" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectGroup>
+          <SelectLabel>Teir</SelectLabel>
+          <SelectItem value="Essential">Essential $50</SelectItem>
+          <SelectItem value="Deluxe">Deluxe $150</SelectItem>
+          <SelectItem value="Ultra">Ultra $350</SelectItem>
+        </SelectGroup>
+      </SelectContent>
+              </Select>
+            </div>
+          
+            <div className="flex flex-col space-y-1.5">
+              <Label htmlFor="questions">What questions do you have?</Label>
               <Textarea id="questions" name="questions" ></Textarea> 
             </div>
             <div className="flex flex-col space-y-1.5">
