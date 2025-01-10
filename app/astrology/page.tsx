@@ -16,13 +16,19 @@ export default function Astrology() {
   return (
     <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
       <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
+        <h1 className="text-4xl lg:text-7xl xl:text-8xl font-bold tracking-tight" >Astrology and Tarot</h1> <br/> <br/>
+        <p className="text-lg lg:text-3xl max-w-screen-xl" >We provide astrological readings combined with tarot to help you understand your life path. 
+         <br/> <br/> Browse this page to see the readings we offer, then fill out the form to get started.
+          </p>      <br/><br/>
+
+      </main>
+
 
       <section className="min-h-screen flex items-center row-span-2 justify-center text-center text-balance flex-col gap-8 px-9">
           <form action={addUser}>
           <CardWithForm></CardWithForm>
           </form>
       </section>
-      </main>
 
       <section className="min-h-screen flex items-center row-span-2 justify-center text-center text-balance flex-col gap-8 px-9">
       <Card>
@@ -96,12 +102,12 @@ export default function Astrology() {
       </CardFooter>
       </Card>
       </section>
-  
 
       <section className="min-h-screen flex items-center row-span-2 justify-center text-center text-balance flex-col gap-8 px-9">
-      
+          <form action={addUser}>
+          <CardWithForm></CardWithForm>
+          </form>
       </section>
-
       
       <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
         
