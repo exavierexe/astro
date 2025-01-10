@@ -8,6 +8,7 @@ import desertscape from "../../public/visuals/desertscape.jpg";
 import officespace from "../../public/visuals/officespace.jpg";
 import secretscroll from "../../public/visuals/secretscroll.jpg";
 import venusbeach from "../../public/visuals/venusbeach.jpg";
+import healing from "../../public/visuals/healing.jpg";
 import { Card, CardHeader, CardContent, CardFooter } from "@/components/ui/card";
 
 export default function Astrology() {
@@ -97,6 +98,24 @@ export default function Astrology() {
           You will get this most out of this if you possess a form of intuition or at least have an understanding of the occult, mythology, and religion. <br/> <br/>
           This will detail the archetypal forces you have access to and how they influence your life. <br/> <br/>
           You will also learn how to balance these forces with occult practices and create your own mythology. 
+          </div>
+      </CardContent>
+      </CardFooter>
+      </Card>
+      </section>
+
+      <section className="min-h-screen flex items-center row-span-2 justify-center text-center text-balance flex-col gap-8 px-9">
+      <Card>
+      <CardHeader className="text-4xl">Health and Natural Medicine</CardHeader>
+        <CardFooter className="grid grid-cols-1 shrink-0 gap-4 md:grid-cols-2">
+        <Image src={healing} alt="secret scroll" width={500} height={500} className="mb-5 mt-5 rounded-lg"/>
+        <CardContent>
+          <div className="text-left">
+          Do you have chronic pain or a lack of energy? <br/> <br/>
+          Maybe you want to finally hit your weight loss goals. <br/> <br/>
+          Or maybe you want better hair, skin, and nails. <br/> <br/>
+          This will reading will show you how to maintain perfect health. <br/> <br/>
+          You will learn how to exercise, eat healthily, and natural remedies for your health issues.<br/> <br/>
           </div>
       </CardContent>
       </CardFooter>
