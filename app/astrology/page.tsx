@@ -114,7 +114,7 @@ export default function Astrology() {
           Do you have chronic pain or a lack of energy? <br/> <br/>
           Maybe you want to finally hit your weight loss goals. <br/> <br/>
           Or maybe you want better hair, skin, and nails. <br/> <br/>
-          This will reading will show you how to maintain perfect health. <br/> <br/>
+          This will reading will identify your problems and show you how to maintain perfect health. <br/> <br/>
           You will learn how to exercise, eat healthily, and natural remedies for your health issues.<br/> <br/>
           </div>
       </CardContent>
