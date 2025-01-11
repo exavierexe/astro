@@ -17,12 +17,13 @@ export default function Astrology() {
   return (
     <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
       <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <h1 className="text-4xl lg:text-7xl xl:text-8xl font-bold tracking-tight" >Astrology and Tarot</h1>
+        
        
       </main>
 
       <section className="flex items-center row-span-2 justify-center text-center text-balance flex-col gap-8 px-9">
       <Card>
+        <CardHeader className="text-4xl"><h1 className="text-4xl lg:text-7xl xl:text-8xl font-bold tracking-tight" >Astrology and Tarot</h1></CardHeader>
         <CardContent>
         <div className="text-left lg:text-2xl"> <br/>
         We provide astrological readings combined with tarot to help you understand your life path. <br/> <br/>
