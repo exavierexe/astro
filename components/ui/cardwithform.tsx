@@ -88,14 +88,14 @@ export function CardWithForm() {
               </Select>
             </div>
             <div className="flex flex-col space-y-1.5">
-              <Label htmlFor="price">Select a price teir</Label>
+              <Label htmlFor="price">Select a price tier</Label>
               <Select name="price">
               <SelectTrigger className="">
         <SelectValue placeholder="" />
       </SelectTrigger>
       <SelectContent>
         <SelectGroup>
-          <SelectLabel>Teir</SelectLabel>
+          <SelectLabel>Tier</SelectLabel>
           <SelectItem value="Essential">Essential $50</SelectItem>
           <SelectItem value="Deluxe">Deluxe $150</SelectItem>
           <SelectItem value="Ultra">Ultra $350</SelectItem>

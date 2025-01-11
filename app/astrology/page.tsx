@@ -135,7 +135,7 @@ export default function Astrology() {
 
       <section className="min-h-screen flex items-center row-span-2 justify-center text-center text-balance flex-col gap-8 px-9">
       <Card>
-      <CardHeader className="text-4xl">Pricing Teirs</CardHeader>
+      <CardHeader className="text-4xl">Pricing Tiers</CardHeader>
       <CardContent>If your request is approved, you will recieve an invoice prior to the reading. Readings will take place over the phone on whatsapp.</CardContent>
         <CardFooter className="grid grid-cols-1 shrink-0 gap-4 md:grid-cols-3">
         <Card>
