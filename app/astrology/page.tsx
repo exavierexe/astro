@@ -26,8 +26,9 @@ export default function Astrology() {
         <CardHeader className="text-4xl"><h1 className="text-4xl lg:text-7xl xl:text-8xl font-bold tracking-tight" >Astrology and Tarot</h1></CardHeader>
         <CardContent>
         <div className="text-left lg:text-2xl"> <br/>
-        We provide astrological readings combined with tarot to help you understand your life path. <br/> <br/>
-        Browse this page to see the readings we offer, then fill out the form to get started.
+        Astrological readings combined with tarot to help you understand your path in life. <br/> <br/>
+        tropical zodiac + sidereal nakshatras <br/> <br/> 
+        Decide on a topic, then fill out the form to get started.
         </div>
       </CardContent>
       </Card>
