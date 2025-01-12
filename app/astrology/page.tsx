@@ -22,16 +22,15 @@ export default function Astrology() {
       </main>
 
       <section className="flex items-center row-span-2 justify-center text-center text-balance flex-col gap-8 px-9">
-      <Card>
-        <CardHeader className="text-4xl"><h1 className="text-4xl lg:text-7xl xl:text-8xl font-bold tracking-tight" >Astrology and Tarot</h1></CardHeader>
-        <CardContent>
+      
+       <h1 className="text-4xl lg:text-7xl xl:text-8xl font-bold tracking-tight" >Astrology and Tarot</h1>
+        
         <div className="text-left lg:text-2xl"> <br/>
         Astrological readings combined with tarot to help you understand your path in life. <br/> <br/>
         tropical zodiac + sidereal nakshatras <br/> <br/> 
         Decide on a topic, then fill out the form to get started.
         </div>
-      </CardContent>
-      </Card>
+      
       </section>
 
       <br></br>
