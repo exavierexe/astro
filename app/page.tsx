@@ -8,14 +8,16 @@ import { CardWithForm } from "@/components/ui/cardwithform"
 import { SignUpButton } from "@clerk/nextjs"
 import { ArrowRightIcon } from "lucide-react";
 import { hero } from "@/components/ui/heroimage";
+import heroimage from "../public/visuals/heroimage.jpg";
 export default function Home() {
 
 
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
+    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)] bg-bannerImg bg-no-repeat bg-cover">
+      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start .bg-white">
        
         <section className="min-h-screen flex items-center justify-center text-center text-balance flex-col gap-8 px-9">
+        
         <h1 className="text-6xl lg:text-7xl xl:text-8xl font-bold tacking-tight" >Realize Your Potential</h1>
         <p className="text-lg lg:text-3xl max-w-screen-xl" >Empower yourself with insights and techniques for personal growth.</p>        
         
