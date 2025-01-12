@@ -11,6 +11,7 @@ export default {
   	extend: {
 		backgroundImage:{
 			bannerImg: "url('/visuals/heroimage.jpg')",
+			whiteOverlay: "bg-gradient-to-t from-gray-900 to-gray-50",
 		},
   		colors: {
   			background: 'hsl(var(--background))',
