@@ -19,7 +19,7 @@ export default function Home() {
         <section className="min-h-screen flex items-center justify-center text-center text-balance flex-col gap-8 px-9">
         
         <h1 className="text-6xl lg:text-7xl xl:text-8xl font-bold tacking-tight" >Realize Your Potential</h1>
-        <p className="text-lg lg:text-3xl max-w-screen-xl" >Empower yourself with insights and techniques for personal growth.</p>        
+        <p className="text-lg lg:text-3xl max-w-screen-xl" >Insights and techniques for personal growth.</p>        
         
         <Link href="/astrology"><Button className="text-lg p-6 rounded-xl flex gap-2">Get a reading<ArrowRightIcon className="size-5" /></Button></Link>
         
