@@ -3,7 +3,7 @@
 import React, { useRef, useEffect, useCallback } from 'react';
 
 // Planet symbols (unicode)
-const PLANET_SYMBOLS = {
+const PLANET_SYMBOLS: Record<string, string> = {
   sun: '☉',
   moon: '☽',
   mercury: '☿',
@@ -23,26 +23,39 @@ const ZODIAC_SYMBOLS = ['♈', '♉', '♊', '♋', '♌', '♍', '♎', '♏', 
 // Helper function to convert degrees to radians
 const degToRad = (deg: number) => (deg * Math.PI) / 180;
 
-type Planet = {
+export type Planet = {
   name: string; 
   symbol: string;
   longitude: number;
   degree: number;
 };
 
-type House = {
+export type House = {
   cusp: number;
   name: string;
   symbol: string;
   degree: number;
 };
 
+export type Aspect = {
+  planet1: string;
+  planet2: string;
+  aspect: string;
+  angle: number;
+  orb: number;
+  symbol: string;
+  influence: string;
+};
+
+export type ChartData = {
+  planets: Record<string, Planet>;
+  houses: Record<string, House>;
+  ascendant: Planet;
+  aspects?: Aspect[];
+};
+
 type ZodiacWheelProps = {
-  chartData: {
-    planets: Record<string, Planet>;
-    houses: Record<string, House>;
-    ascendant: Planet;
-  };
+  chartData: ChartData;
   width?: number;
   height?: number;
 };
@@ -80,7 +93,8 @@ export function ZodiacWheel({ chartData, width = 600, height = 600 }: ZodiacWhee
     } catch (error) {
       console.error('Error drawing zodiac wheel:', error);
     }
-  }, [chartData, width, height, drawZodiacWheel, drawHouses, drawPlanets]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chartData, width, height]);
   
   const drawZodiacWheel = useCallback((ctx: CanvasRenderingContext2D) => {
     // Draw zodiac ring
@@ -102,7 +116,7 @@ export function ZodiacWheel({ chartData, width = 600, height = 600 }: ZodiacWhee
     const ascendantDegree = chartData?.ascendant?.longitude || 0;
     
     // Set up an array of colors for the zodiac signs
-    const elementColors = {
+    const elementColors: Record<string, string> = {
       fire: 'rgba(255, 100, 50, 0.3)',  // Orange for Fire signs (Aries, Leo, Sagittarius)
       earth: 'rgba(100, 200, 50, 0.3)', // Green for Earth signs (Taurus, Virgo, Capricorn)
       air: 'rgba(100, 200, 255, 0.3)',  // Blue for Air signs (Gemini, Libra, Aquarius)
@@ -210,7 +224,7 @@ export function ZodiacWheel({ chartData, width = 600, height = 600 }: ZodiacWhee
     const ascendantDegree = chartData.ascendant?.longitude || 0;
     
     // Define colors for planets
-    const planetColors = {
+    const planetColors: Record<string, string> = {
       sun: '#ffcc00',       // Gold
       moon: '#e6e6fa',      // Light purple
       mercury: '#66ccff',   // Light blue

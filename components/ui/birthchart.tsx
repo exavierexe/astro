@@ -5,6 +5,8 @@ import Image from "next/image";
 import { useState } from "react";
 import Link from "next/link";
 
+type ChartPlanet = 'ascendant' | 'sun' | 'moon' | 'mercury' | 'venus' | 'mars' | 'jupiter' | 'saturn' | 'uranus' | 'neptune' | 'pluto';
+
 type BirthChartProps = {
   chart: {
     id: number;
@@ -24,6 +26,9 @@ type BirthChartProps = {
     neptune?: string;
     pluto?: string;
     notes?: string;
+    houses?: Record<string, any> | string;
+    aspects?: any[] | string;
+    [key: string]: any; // Index signature to allow string indexing
   };
 };
 
@@ -204,52 +209,26 @@ export function BirthChart({ chart }: BirthChartProps) {
 import { ZodiacWheel } from './zodiacwheel';
 import { useEffect } from 'react';
 
-type ChartDataType = {
-  planets: Record<string, {
-    name: string;
-    symbol: string;
-    longitude: number;
-    degree: number;
-  }>;
-  houses: Record<string, {
-    cusp: number;
-    name: string;
-    symbol: string;
-    degree: number;
-  }>;
-  ascendant: {
-    name: string;
-    symbol: string;
-    longitude: number;
-    degree: number;
-  };
-  aspects: Array<{
-    planet1: string;
-    planet2: string;
-    aspect: string;
-    angle: number;
-    orb: number;
-    symbol: string;
-    influence: string;
-  }>;
-};
+import { ChartData, Planet, House, Aspect } from './zodiacwheel';
 
 export function BirthChartFull({ chart }: BirthChartProps) {
-  const [chartData, setChartData] = useState<ChartDataType | null>(null);
+  const [chartData, setChartData] = useState<ChartData | null>(null);
   
   useEffect(() => {
     // Process chart data for the ZodiacWheel component
-    if (chart && chart.houses && typeof chart.houses === 'object') {
+    if (chart) {
       try {
         // Convert stored string sign positions to objects with longitude
-        const planetPositions: Record<string, any> = {};
-        const planets = ['sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto', 'ascendant'];
+        const planetPositions: Record<string, Planet> = {};
+        const planets = ['sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto', 'ascendant'] as const;
+        
+        type PlanetKey = typeof planets[number];
         
         // Mock planet data conversion
         // In a real implementation, this would parse the stored data in the correct format
         planets.forEach(planet => {
-          const position = chart[planet];
-          if (position) {
+          const position = chart[planet as keyof typeof chart];
+          if (position && typeof position === 'string') {
             const [sign, degStr] = position.split(' ');
             const deg = parseFloat(degStr.replace('°', ''));
             
@@ -258,34 +237,58 @@ export function BirthChartFull({ chart }: BirthChartProps) {
                               'Libra', 'Scorpio', 'Sagittarius', 'Capricorn', 'Aquarius', 'Pisces']
                               .findIndex(s => s === sign);
             
-            const baseLongitude = signIndex * 30;
-            const longitude = baseLongitude + deg;
-            
-            planetPositions[planet] = {
-              name: sign,
-              symbol: '♈♉♊♋♌♍♎♏♐♑♒♓'.charAt(signIndex),
-              longitude,
-              degree: deg
-            };
+            if (signIndex !== -1) {
+              const baseLongitude = signIndex * 30;
+              const longitude = baseLongitude + deg;
+              
+              planetPositions[planet] = {
+                name: sign,
+                symbol: '♈♉♊♋♌♍♎♏♐♑♒♓'.charAt(signIndex),
+                longitude,
+                degree: deg
+              };
+            }
           }
         });
         
         // Parse house data
-        let houseData = {};
-        if (typeof chart.houses === 'string') {
-          // If it's a string, try to parse it as JSON
-          houseData = JSON.parse(chart.houses);
+        let houseData: Record<string, House> = {};
+        if (chart.houses) {
+          if (typeof chart.houses === 'string') {
+            // If it's a string, try to parse it as JSON
+            houseData = JSON.parse(chart.houses) as Record<string, House>;
+          } else if (typeof chart.houses === 'object') {
+            // If it's already an object, use it directly
+            houseData = chart.houses as Record<string, House>;
+          }
         } else {
-          // If it's already an object, use it directly
-          houseData = chart.houses;
+          // Create default houses if none exist
+          for (let i = 1; i <= 12; i++) {
+            houseData[`house${i}`] = {
+              cusp: (i - 1) * 30,
+              name: `House ${i}`,
+              symbol: '',
+              degree: 0
+            };
+          }
         }
+        
+        // Ensure ascendant exists
+        const ascendant = planetPositions.ascendant || {
+          name: 'Aries',
+          symbol: '♈',
+          longitude: 0,
+          degree: 0
+        };
         
         // Create chart data for the wheel
         setChartData({
           planets: planetPositions,
           houses: houseData,
-          ascendant: planetPositions.ascendant,
-          aspects: typeof chart.aspects === 'string' ? JSON.parse(chart.aspects) : chart.aspects || []
+          ascendant,
+          aspects: typeof chart.aspects === 'string' 
+            ? JSON.parse(chart.aspects) 
+            : (chart.aspects || [])
         });
       } catch (error) {
         console.error('Error processing chart data:', error);
@@ -411,7 +414,7 @@ export function BirthChartFull({ chart }: BirthChartProps) {
               <div>
                 <h3 className="text-xl font-medium mb-3 pb-2 border-b border-gray-800 text-blue-400">Personal Planets</h3>
                 <div className="space-y-3">
-                  {['ascendant', 'sun', 'moon', 'mercury', 'venus', 'mars'].map(planet => (
+                  {(['ascendant', 'sun', 'moon', 'mercury', 'venus', 'mars'] as const).map((planet) => (
                     <div key={planet} className="flex justify-between items-center border-b border-gray-800 border-opacity-50 pb-2">
                       <span className="flex items-center gap-2">
                         <span className={`text-lg ${getPlanetColor(planet)}`}>{getPlanetSymbol(planet)}</span>
@@ -428,7 +431,7 @@ export function BirthChartFull({ chart }: BirthChartProps) {
               <div>
                 <h3 className="text-xl font-medium mb-3 pb-2 border-b border-gray-800 text-blue-400">Outer Planets</h3>
                 <div className="space-y-3">
-                  {['jupiter', 'saturn', 'uranus', 'neptune', 'pluto'].map(planet => (
+                  {(['jupiter', 'saturn', 'uranus', 'neptune', 'pluto'] as const).map((planet) => (
                     <div key={planet} className="flex justify-between items-center border-b border-gray-800 border-opacity-50 pb-2">
                       <span className="flex items-center gap-2">
                         <span className={`text-lg ${getPlanetColor(planet)}`}>{getPlanetSymbol(planet)}</span>
