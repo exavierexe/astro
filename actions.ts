@@ -222,19 +222,6 @@ export const getTarotReadingById = async (readingId: number) => {
   }
 };
 
-export const deleteTarotReading = async (readingId: number) => {
-  try {
-    await prisma.tarotReading.delete({
-      where: { id: readingId }
-    });
-    revalidatePath('/divination');
-    return { success: true };
-  } catch (error) {
-    console.error("Error deleting tarot reading:", error);
-    return { success: false, error: "Failed to delete tarot reading." };
-  }
-};
-
 // Save a tarot reading
 export const saveTarotReading = async (formData: FormData) => {
   try {
@@ -311,6 +298,20 @@ export const getTarotReadingById = async (readingId: number) => {
   } catch (error) {
     console.error("Error fetching tarot reading:", error);
     return null;
+  }
+};
+
+// Delete a tarot reading
+export const deleteTarotReading = async (readingId: number) => {
+  try {
+    await prisma.tarotReading.delete({
+      where: { id: readingId }
+    });
+    revalidatePath('/divination');
+    return { success: true };
+  } catch (error) {
+    console.error("Error deleting tarot reading:", error);
+    return { success: false, error: "Failed to delete tarot reading." };
   }
 };
 
