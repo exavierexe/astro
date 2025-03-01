@@ -1,5 +1,9 @@
-import * as swisseph from 'swisseph-v2';
+// Fall back to using sweph (which was already working) and handle both
+import sweph from 'sweph';
 import path from 'path';
+
+// We'll use the original sweph package
+const swisseph = sweph;
 
 // Initialize Swiss Ephemeris with the ephemeris data path
 const ephePath = path.join(process.cwd(), 'swisseph-master/ephe');
@@ -15,16 +19,16 @@ try {
 
 // Celestial body constants
 export const CELESTIAL_BODIES = {
-  SUN: swisseph.SE_SUN,
-  MOON: swisseph.SE_MOON,
-  MERCURY: swisseph.SE_MERCURY,
-  VENUS: swisseph.SE_VENUS,
-  MARS: swisseph.SE_MARS,
-  JUPITER: swisseph.SE_JUPITER,
-  SATURN: swisseph.SE_SATURN,
-  URANUS: swisseph.SE_URANUS,
-  NEPTUNE: swisseph.SE_NEPTUNE,
-  PLUTO: swisseph.SE_PLUTO,
+  SUN: swisseph.constants.SE_SUN,
+  MOON: swisseph.constants.SE_MOON,
+  MERCURY: swisseph.constants.SE_MERCURY,
+  VENUS: swisseph.constants.SE_VENUS,
+  MARS: swisseph.constants.SE_MARS,
+  JUPITER: swisseph.constants.SE_JUPITER,
+  SATURN: swisseph.constants.SE_SATURN,
+  URANUS: swisseph.constants.SE_URANUS,
+  NEPTUNE: swisseph.constants.SE_NEPTUNE,
+  PLUTO: swisseph.constants.SE_PLUTO,
 };
 
 // Zodiac sign definitions
@@ -79,7 +83,7 @@ function getJulianDay(date: Date): number {
     date.getUTCMonth() + 1, // months are 0-indexed in JS, 1-indexed in swisseph
     date.getUTCDate(),
     date.getUTCHours() + date.getUTCMinutes() / 60 + date.getUTCSeconds() / 3600,
-    swisseph.SE_GREG_CAL
+    swisseph.constants.SE_GREG_CAL
   );
 }
 
@@ -182,7 +186,7 @@ function calculatePlanetPosition(julianDay: number, planet: number) {
     console.log(`Calculating position for planet ${planet} at Julian day ${julianDay}`);
     
     // Use basic ephemeris calculation flags 
-    const flags = swisseph.SEFLG_SWIEPH;
+    const flags = swisseph.constants.SEFLG_SWIEPH;
     const result = swisseph.calc_ut(julianDay, planet, flags);
     
     console.log(`Planet ${planet} calculation result:`, result);
@@ -234,16 +238,16 @@ function getTestPlanetPosition(planet: number, julianDay?: number): number {
   
   // Each planet's base position offset
   const planetOffsets = {
-    [swisseph.SE_SUN]: 0,      
-    [swisseph.SE_MOON]: 30,    
-    [swisseph.SE_MERCURY]: 60, 
-    [swisseph.SE_VENUS]: 90,   
-    [swisseph.SE_MARS]: 120,   
-    [swisseph.SE_JUPITER]: 150,
-    [swisseph.SE_SATURN]: 180, 
-    [swisseph.SE_URANUS]: 210, 
-    [swisseph.SE_NEPTUNE]: 240,
-    [swisseph.SE_PLUTO]: 270,  
+    [swisseph.constants.SE_SUN]: 0,      
+    [swisseph.constants.SE_MOON]: 30,    
+    [swisseph.constants.SE_MERCURY]: 60, 
+    [swisseph.constants.SE_VENUS]: 90,   
+    [swisseph.constants.SE_MARS]: 120,   
+    [swisseph.constants.SE_JUPITER]: 150,
+    [swisseph.constants.SE_SATURN]: 180, 
+    [swisseph.constants.SE_URANUS]: 210, 
+    [swisseph.constants.SE_NEPTUNE]: 240,
+    [swisseph.constants.SE_PLUTO]: 270,  
   };
   
   // Add base position based on planet

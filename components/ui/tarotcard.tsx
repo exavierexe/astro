@@ -1,9 +1,8 @@
 "use client";
-import { Card, CardContent } from "./card";
+import { Card, CardContent, CardHeader, CardTitle } from "./card";
 import { Button } from "./button";
 import Image from "next/image";
 import { saveTarotReading } from "@/actions";
-import globe from "../../public/globe.svg";
 import tarot0 from "../../public/tarot/tarot0.png"
 import tarot1 from "../../public/tarot/tarot1.png"
 import tarot2 from "../../public/tarot/tarot2.png"
@@ -412,5 +411,4 @@ export function TarotCard() {
             </Card>
         </div>
     );
-}
-}
+};
