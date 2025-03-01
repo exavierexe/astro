@@ -36,6 +36,25 @@ export const addUser = async (formData: FormData) => {
     });
   };
 
+// Define the types for the chart data
+interface PlanetInfo {
+  name: string;
+  degree: number;
+  [key: string]: any;
+}
+
+interface PlanetsData {
+  [key: string]: PlanetInfo | undefined;
+}
+
+interface ChartData {
+  ascendant?: PlanetInfo;
+  planets?: PlanetsData;
+  houses?: Record<string, any>;
+  aspects?: any[];
+  [key: string]: any;
+}
+
 export const calculateBirthChart = async (formData: FormData) => {
   try {
     const name = formData.get("name") as string;
@@ -72,12 +91,12 @@ export const calculateBirthChart = async (formData: FormData) => {
     }
 
     // Calculate the birth chart using our ephemeris functions
-    const chartData = await calculateEphemerisChart(dateObj, latitude, longitude, houseSystem);
+    const chartData: ChartData = await calculateEphemerisChart(dateObj, latitude, longitude, houseSystem);
     console.log('Chart calculation completed');
     
     // Helper function to safely get planet info
-    const getPlanetInfo = (planetName: string) => {
-      const planets = chartData.planets || {};
+    const getPlanetInfo = (planetName: string): string => {
+      const planets: PlanetsData = chartData.planets || {};
       const planet = planets[planetName];
       
       if (planet && typeof planet === 'object' && 'name' in planet && 'degree' in planet) {
@@ -293,11 +312,11 @@ export const updateBirthChart = async (chartId: number, formData: FormData) => {
     }
 
     // Recalculate the birth chart
-    const chartData = await calculateEphemerisChart(dateObj, latitude, longitude);
+    const chartData: ChartData = await calculateEphemerisChart(dateObj, latitude, longitude);
     
     // Helper function to safely get planet info
-    const getPlanetInfo = (planetName: string) => {
-      const planets = chartData.planets || {};
+    const getPlanetInfo = (planetName: string): string => {
+      const planets: PlanetsData = chartData.planets || {};
       const planet = planets[planetName];
       
       if (planet && typeof planet === 'object' && 'name' in planet && 'degree' in planet) {
