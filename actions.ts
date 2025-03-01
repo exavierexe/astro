@@ -161,66 +161,8 @@ export const deleteBirthChart = async (chartId: number) => {
 };
 
 // Tarot Reading Actions
-export const saveTarotReading = async (formData: FormData) => {
-  try {
-    const name = formData.get("name") as string;
-    const spreadType = formData.get("spreadType") as string;
-    const cards = formData.get("cards") as string;
-    const question = formData.get("question") as string;
-    const notes = formData.get("notes") as string;
-    const userId = formData.get("userId") as string;
-    
-    // Parse cards JSON
-    const cardsData = JSON.parse(cards);
-    
-    // Save the tarot reading to the database
-    const reading = await prisma.tarotReading.create({
-      data: {
-        name,
-        spreadType,
-        cards: cardsData,
-        question,
-        notes,
-        userId: userId ? parseInt(userId) : undefined,
-      }
-    });
-    
-    revalidatePath('/divination');
-    return { success: true, readingId: reading.id };
-  } catch (error) {
-    console.error("Error saving tarot reading:", error);
-    return { 
-      success: false, 
-      error: "Failed to save tarot reading. Please try again." 
-    };
-  }
-};
 
-export const getTarotReadings = async (userId?: number) => {
-  try {
-    const where = userId ? { userId } : {};
-    const readings = await prisma.tarotReading.findMany({
-      where,
-      orderBy: { createdAt: 'desc' }
-    });
-    return readings;
-  } catch (error) {
-    console.error("Error fetching tarot readings:", error);
-    return [];
-  }
-};
 
-export const getTarotReadingById = async (readingId: number) => {
-  try {
-    const reading = await prisma.tarotReading.findUnique({
-      where: { id: readingId }
-    });
-    return reading;
-  } catch (error) {
-    console.error("Error fetching tarot reading:", error);
-    return null;
-  }
-};
 
 // Save a tarot reading
 export const saveTarotReading = async (formData: FormData) => {
