@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 
 // Planet symbols (unicode)
 const PLANET_SYMBOLS = {
@@ -80,9 +80,9 @@ export function ZodiacWheel({ chartData, width = 600, height = 600 }: ZodiacWhee
     } catch (error) {
       console.error('Error drawing zodiac wheel:', error);
     }
-  }, [chartData, width, height]);
+  }, [chartData, width, height, drawZodiacWheel, drawHouses, drawPlanets]);
   
-  const drawZodiacWheel = (ctx: CanvasRenderingContext2D) => {
+  const drawZodiacWheel = useCallback((ctx: CanvasRenderingContext2D) => {
     // Draw zodiac ring
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 1;
@@ -99,7 +99,7 @@ export function ZodiacWheel({ chartData, width = 600, height = 600 }: ZodiacWhee
     
     // Draw zodiac signs divisions (30 degrees each)
     // Use 0 as the default ascendant degree if it's not available
-    const ascendantDegree = chartData.ascendant?.longitude || 0;
+    const ascendantDegree = chartData?.ascendant?.longitude || 0;
     
     // Set up an array of colors for the zodiac signs
     const elementColors = {
@@ -149,9 +149,9 @@ export function ZodiacWheel({ chartData, width = 600, height = 600 }: ZodiacWhee
       const symbol = i < ZODIAC_SYMBOLS.length ? ZODIAC_SYMBOLS[i] : '?';
       ctx.fillText(symbol, symbolX, symbolY);
     }
-  };
+  }, [centerX, centerY, outerRadius, houseRadius, zodiacWidth, chartData]);
   
-  const drawHouses = (ctx: CanvasRenderingContext2D) => {
+  const drawHouses = useCallback((ctx: CanvasRenderingContext2D) => {
     if (!chartData || !chartData.houses) return;
     
     const ascendantDegree = chartData.ascendant?.longitude || 0;
@@ -202,9 +202,9 @@ export function ZodiacWheel({ chartData, width = 600, height = 600 }: ZodiacWhee
       ctx.textBaseline = 'middle';
       ctx.fillText(i.toString(), numberX, numberY);
     }
-  };
+  }, [centerX, centerY, houseRadius, chartData]);
   
-  const drawPlanets = (ctx: CanvasRenderingContext2D) => {
+  const drawPlanets = useCallback((ctx: CanvasRenderingContext2D) => {
     if (!chartData || !chartData.planets) return;
     
     const ascendantDegree = chartData.ascendant?.longitude || 0;
@@ -333,7 +333,7 @@ export function ZodiacWheel({ chartData, width = 600, height = 600 }: ZodiacWhee
     ctx.textBaseline = 'middle';
     ctx.fillText('ASC', ascX, ascY);
     ctx.lineWidth = 1;
-  };
+  }, [centerX, centerY, outerRadius, houseRadius, planetRadius, chartData]);
   
   return (
     <div className="relative w-full max-w-full mx-auto flex items-center justify-center">

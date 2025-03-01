@@ -587,7 +587,7 @@ export function BirthChartForm() {
               required
             />
             <p className="text-xs text-gray-400 mt-1">
-              Enter a city name like "Miami" or "Miami, Florida" - try to use major cities for better accuracy
+              Enter a city name like &quot;Miami&quot; or &quot;Miami, Florida&quot; - try to use major cities for better accuracy
             </p>
           </div>
           
