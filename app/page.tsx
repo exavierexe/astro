@@ -23,6 +23,8 @@ export default function Home() {
         
         <Link href="/astrology"><Button className="text-lg p-6 rounded-xl flex gap-2">Get a reading<ArrowRightIcon className="size-5" /></Button></Link>
         
+        <Link href="/birth-chart"><Button className="text-lg p-6 rounded-xl flex gap-2">Birth Chart Calculator<ArrowRightIcon className="size-5" /></Button></Link>
+        
         <Link href="/divination"><Button className="text-lg p-6 rounded-xl flex gap-2">Tarot self service<ArrowRightIcon className="size-5" /></Button></Link>
         </section>
       </main>

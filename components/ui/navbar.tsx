@@ -20,6 +20,7 @@ export function NavBar() {
         </button>
         <div className={`flex flex-col md:flex-row md:justify-end gap-4 absolute left-0 right-0 top-full bg-background/95 md:static ${isOpen ? 'flex' : 'hidden md:flex'}`}>
           <Link className="text-lg p-2 ml-8 hover:bg-gray-700 rounded transition-colors" href="/astrology">Astrology</Link>
+          <Link className="text-lg p-2 ml-8 md:ml-0 hover:bg-gray-700 rounded transition-colors" href="/birth-chart">Birth Chart</Link>
           <Link className="text-lg p-2 ml-8 md:ml-0 hover:bg-gray-700 rounded transition-colors" href="/divination">Divination</Link>
           <Link className="text-lg p-2 ml-8 md:ml-0 hover:bg-gray-700 rounded transition-colors" href="/magick">Magick</Link>
           <Link className="text-lg p-2 ml-8 md:ml-0 hover:bg-gray-700 rounded transition-colors" href="/alchemy">Alchemy</Link>
