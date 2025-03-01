@@ -9,64 +9,21 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 
 export default function BirthChartDetail() {
+  // State hooks - must be called at the top level
   const [birthChart, setBirthChart] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const params = useParams();
-  const router = useRouter();
-  const chartId = params?.id as string;
-
-  useEffect(() => {
-    const loadChart = async () => {
-      try {
-        if (!chartId) {
-          setError("No chart ID provided");
-          setIsLoading(false);
-          return;
-        }
-
-        const chart = await getBirthChartById(parseInt(chartId));
-        
-        if (!chart) {
-          setError("Chart not found");
-        } else {
-          setBirthChart(chart);
-        }
-      } catch (error) {
-        console.error("Error loading birth chart:", error);
-        setError("Error loading birth chart");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadChart();
-  }, [chartId]);
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p>Loading birth chart...</p>
-      </div>
-    );
-  }
-
-  if (error || !birthChart) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center space-y-4">
-        <h1 className="text-2xl font-bold text-red-500">{error || "Chart not found"}</h1>
-        <Link href="/birth-chart">
-          <Button>Back to Birth Charts</Button>
-        </Link>
-      </div>
-    );
-  }
-
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Hooks for navigation
+  const params = useParams();
+  const router = useRouter();
+  const chartId = params?.id as string;
 
+  // Function declarations that should be accessible in all render paths
   const handleEdit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsProcessing(true);
@@ -117,6 +74,54 @@ export default function BirthChartDetail() {
     const d = new Date(date);
     return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
   };
+
+  useEffect(() => {
+    const loadChart = async () => {
+      try {
+        if (!chartId) {
+          setError("No chart ID provided");
+          setIsLoading(false);
+          return;
+        }
+
+        const chart = await getBirthChartById(parseInt(chartId));
+        
+        if (!chart) {
+          setError("Chart not found");
+        } else {
+          setBirthChart(chart);
+        }
+      } catch (error) {
+        console.error("Error loading birth chart:", error);
+        setError("Error loading birth chart");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadChart();
+  }, [chartId]);
+
+  // Render loading state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p>Loading birth chart...</p>
+      </div>
+    );
+  }
+
+  // Render error state
+  if (error || !birthChart) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center space-y-4">
+        <h1 className="text-2xl font-bold text-red-500">{error || "Chart not found"}</h1>
+        <Link href="/birth-chart">
+          <Button>Back to Birth Charts</Button>
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen p-8">
