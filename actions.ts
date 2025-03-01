@@ -80,16 +80,16 @@ export const calculateBirthChart = async (formData: FormData) => {
     // Format the planet positions for storage, with safeguards
     const planetPositions = {
       ascendant: chartData.ascendant ? `${chartData.ascendant.name} ${chartData.ascendant.degree}°` : 'Unknown',
-      sun: chartData.planets.sun ? `${chartData.planets.sun.name} ${chartData.planets.sun.degree}°` : 'Unknown',
-      moon: chartData.planets.moon ? `${chartData.planets.moon.name} ${chartData.planets.moon.degree}°` : 'Unknown',
-      mercury: chartData.planets.mercury ? `${chartData.planets.mercury.name} ${chartData.planets.mercury.degree}°` : 'Unknown',
-      venus: chartData.planets.venus ? `${chartData.planets.venus.name} ${chartData.planets.venus.degree}°` : 'Unknown',
-      mars: chartData.planets.mars ? `${chartData.planets.mars.name} ${chartData.planets.mars.degree}°` : 'Unknown',
-      jupiter: chartData.planets.jupiter ? `${chartData.planets.jupiter.name} ${chartData.planets.jupiter.degree}°` : 'Unknown',
-      saturn: chartData.planets.saturn ? `${chartData.planets.saturn.name} ${chartData.planets.saturn.degree}°` : 'Unknown',
-      uranus: chartData.planets.uranus ? `${chartData.planets.uranus.name} ${chartData.planets.uranus.degree}°` : 'Unknown',
-      neptune: chartData.planets.neptune ? `${chartData.planets.neptune.name} ${chartData.planets.neptune.degree}°` : 'Unknown',
-      pluto: chartData.planets.pluto ? `${chartData.planets.pluto.name} ${chartData.planets.pluto.degree}°` : 'Unknown',
+      sun: chartData.planets?.sun ? `${chartData.planets.sun.name} ${chartData.planets.sun.degree}°` : 'Unknown',
+      moon: chartData.planets?.moon ? `${chartData.planets.moon.name} ${chartData.planets.moon.degree}°` : 'Unknown',
+      mercury: chartData.planets?.mercury ? `${chartData.planets.mercury.name} ${chartData.planets.mercury.degree}°` : 'Unknown',
+      venus: chartData.planets?.venus ? `${chartData.planets.venus.name} ${chartData.planets.venus.degree}°` : 'Unknown',
+      mars: chartData.planets?.mars ? `${chartData.planets.mars.name} ${chartData.planets.mars.degree}°` : 'Unknown',
+      jupiter: chartData.planets?.jupiter ? `${chartData.planets.jupiter.name} ${chartData.planets.jupiter.degree}°` : 'Unknown',
+      saturn: chartData.planets?.saturn ? `${chartData.planets.saturn.name} ${chartData.planets.saturn.degree}°` : 'Unknown',
+      uranus: chartData.planets?.uranus ? `${chartData.planets.uranus.name} ${chartData.planets.uranus.degree}°` : 'Unknown',
+      neptune: chartData.planets?.neptune ? `${chartData.planets.neptune.name} ${chartData.planets.neptune.degree}°` : 'Unknown',
+      pluto: chartData.planets?.pluto ? `${chartData.planets.pluto.name} ${chartData.planets.pluto.degree}°` : 'Unknown',
     };
     
     // Save the birth chart to the database
@@ -287,16 +287,16 @@ export const updateBirthChart = async (chartId: number, formData: FormData) => {
     // Format the planet positions for storage
     const planetPositions = {
       ascendant: chartData.ascendant ? `${chartData.ascendant.name} ${chartData.ascendant.degree}°` : 'Unknown',
-      sun: chartData.planets.sun ? `${chartData.planets.sun.name} ${chartData.planets.sun.degree}°` : 'Unknown',
-      moon: chartData.planets.moon ? `${chartData.planets.moon.name} ${chartData.planets.moon.degree}°` : 'Unknown',
-      mercury: chartData.planets.mercury ? `${chartData.planets.mercury.name} ${chartData.planets.mercury.degree}°` : 'Unknown',
-      venus: chartData.planets.venus ? `${chartData.planets.venus.name} ${chartData.planets.venus.degree}°` : 'Unknown',
-      mars: chartData.planets.mars ? `${chartData.planets.mars.name} ${chartData.planets.mars.degree}°` : 'Unknown',
-      jupiter: chartData.planets.jupiter ? `${chartData.planets.jupiter.name} ${chartData.planets.jupiter.degree}°` : 'Unknown',
-      saturn: chartData.planets.saturn ? `${chartData.planets.saturn.name} ${chartData.planets.saturn.degree}°` : 'Unknown',
-      uranus: chartData.planets.uranus ? `${chartData.planets.uranus.name} ${chartData.planets.uranus.degree}°` : 'Unknown',
-      neptune: chartData.planets.neptune ? `${chartData.planets.neptune.name} ${chartData.planets.neptune.degree}°` : 'Unknown',
-      pluto: chartData.planets.pluto ? `${chartData.planets.pluto.name} ${chartData.planets.pluto.degree}°` : 'Unknown',
+      sun: chartData.planets?.sun ? `${chartData.planets.sun.name} ${chartData.planets.sun.degree}°` : 'Unknown',
+      moon: chartData.planets?.moon ? `${chartData.planets.moon.name} ${chartData.planets.moon.degree}°` : 'Unknown',
+      mercury: chartData.planets?.mercury ? `${chartData.planets.mercury.name} ${chartData.planets.mercury.degree}°` : 'Unknown',
+      venus: chartData.planets?.venus ? `${chartData.planets.venus.name} ${chartData.planets.venus.degree}°` : 'Unknown',
+      mars: chartData.planets?.mars ? `${chartData.planets.mars.name} ${chartData.planets.mars.degree}°` : 'Unknown',
+      jupiter: chartData.planets?.jupiter ? `${chartData.planets.jupiter.name} ${chartData.planets.jupiter.degree}°` : 'Unknown',
+      saturn: chartData.planets?.saturn ? `${chartData.planets.saturn.name} ${chartData.planets.saturn.degree}°` : 'Unknown',
+      uranus: chartData.planets?.uranus ? `${chartData.planets.uranus.name} ${chartData.planets.uranus.degree}°` : 'Unknown',
+      neptune: chartData.planets?.neptune ? `${chartData.planets.neptune.name} ${chartData.planets.neptune.degree}°` : 'Unknown',
+      pluto: chartData.planets?.pluto ? `${chartData.planets.pluto.name} ${chartData.planets.pluto.degree}°` : 'Unknown',
     };
     
     // Update the birth chart in the database
