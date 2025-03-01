@@ -9,15 +9,25 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { TarotCard } from "@/components/ui/tarotcard";
 
+// Card type definition
+type TarotCard = {
+  position: string;
+  description: string;
+  reversed?: boolean;
+  [key: string]: any; // For any additional properties
+};
+
 // Type for tarot reading data
 type TarotReadingType = {
   id: number;
   name: string;
   spreadType: string;
-  cards: any[];
-  question?: string;
-  notes?: string;
-  createdAt: string;
+  cards: TarotCard[];
+  question?: string | null;
+  notes?: string | null;
+  createdAt: Date | string;
+  updatedAt?: Date;
+  userId?: number | null;
 };
 
 export default function Divination() {
@@ -39,7 +49,15 @@ export default function Divination() {
     setIsLoading(true);
     try {
       const readings = await getTarotReadings();
-      setSavedReadings(readings);
+      // Transform the readings to make sure cards is parsed correctly
+      const parsedReadings = readings.map(reading => ({
+        ...reading,
+        // Parse cards if it's a string, otherwise use as is
+        cards: typeof reading.cards === 'string' 
+          ? JSON.parse(reading.cards) 
+          : reading.cards
+      }));
+      setSavedReadings(parsedReadings);
     } catch (error) {
       console.error("Error loading tarot readings:", error);
     } finally {
@@ -50,18 +68,30 @@ export default function Divination() {
   // Handle saving a new reading
   const handleSaveReading = async (reading: any) => {
     try {
-      const result = await saveTarotReading(new FormData(
-        Object.entries(reading).reduce((form, [key, value]) => {
-          form.append(key, typeof value === 'object' ? JSON.stringify(value) : value as string);
-          return form;
-        }, new FormData())
-      ));
+      // Create a FormData object directly without using a constructor
+      const formData = new FormData();
       
-      if (result.success) {
-        // Reload readings if the readings list is visible
-        if (showReadings) {
-          loadReadings();
+      // Process each key-value pair in the reading object
+      for (const key in reading) {
+        if (Object.prototype.hasOwnProperty.call(reading, key)) {
+          const value = reading[key];
+          
+          // Convert objects to JSON strings, everything else to string
+          const processedValue = typeof value === 'object' && value !== null 
+            ? JSON.stringify(value) 
+            : String(value);
+            
+          // Append to FormData
+          formData.append(key, processedValue);
         }
+      }
+      
+      // Send the FormData to the server
+      const result = await saveTarotReading(formData);
+      
+      // Handle success by reloading readings if needed
+      if (result.success && showReadings) {
+        loadReadings();
       }
       
       return result;
@@ -88,8 +118,9 @@ export default function Divination() {
   };
 
   // Format date for display
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', {
+  const formatDate = (date: Date | string) => {
+    const dateObj = date instanceof Date ? date : new Date(date);
+    return dateObj.toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric'
@@ -169,7 +200,7 @@ export default function Divination() {
                   <div>
                     <h4 className="text-sm font-medium text-purple-400 mb-2">Cards:</h4>
                     <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
-                      {viewingReading.cards.map((card, i) => (
+                      {viewingReading.cards.map((card: TarotCard, i) => (
                         <div key={i} className="bg-black bg-opacity-50 rounded-lg p-3 border border-gray-800">
                           <div className="font-medium text-gray-200">{card.position}</div>
                           <div className="text-sm text-gray-400 mt-1">{card.description}</div>
@@ -239,7 +270,7 @@ export default function Divination() {
                         )}
                         
                         <div className="flex flex-wrap gap-1 mt-1">
-                          {reading.cards.slice(0, 3).map((card, i) => (
+                          {reading.cards.slice(0, 3).map((card: TarotCard, i) => (
                             <div key={i} className="px-2 py-1 bg-black bg-opacity-50 rounded text-xs text-gray-300">
                               {card.position}
                               {card.reversed && ' (R)'}
