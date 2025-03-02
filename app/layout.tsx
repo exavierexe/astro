@@ -35,10 +35,12 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased dark`}
       >
-        <div>
+        <div className="fixed top-0 left-0 right-0 z-50">
           <NavBar/>
         </div>
-        {children}
+        <div className="pt-16"> {/* Add padding top to move content below navbar */}
+          {children}
+        </div>
         
       </body>
     </html>

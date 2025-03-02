@@ -10,7 +10,7 @@ export function NavBar() {
   const toggleMenu = () => setIsOpen(!isOpen);
 
   return (
-    <header className="flex py-6 shadow-xl fixed top-0 w-full z-10 bg-background/95">
+    <header className="flex py-6 shadow-xl fixed top-0 w-full z-50 bg-gray-950 backdrop-blur-sm">
       <nav className="flex items-center justify-between md:justify-end w-full px-4 container">
         <Link href="/" className="mr-auto">
           <BrandLogo />
@@ -18,7 +18,7 @@ export function NavBar() {
         <button className="md:hidden" onClick={toggleMenu}>
           {isOpen ? <X size={24} /> : <Menu size={24} />}
         </button>
-        <div className={`flex flex-col md:flex-row md:justify-end gap-4 absolute left-0 right-0 top-full bg-background/95 md:static ${isOpen ? 'flex' : 'hidden md:flex'}`}>
+        <div className={`flex flex-col md:flex-row md:justify-end gap-4 absolute left-0 right-0 top-full bg-gray-950 shadow-lg md:shadow-none md:static z-50 ${isOpen ? 'flex' : 'hidden md:flex'}`}>
           <Link className="text-lg p-2 ml-8 hover:bg-gray-700 rounded transition-colors" href="/astrology">Astrology</Link>
           <Link className="text-lg p-2 ml-8 md:ml-0 hover:bg-gray-700 rounded transition-colors" href="/birth-chart">Birth Chart</Link>
           <Link className="text-lg p-2 ml-8 md:ml-0 hover:bg-gray-700 rounded transition-colors" href="/divination">Divination</Link>
