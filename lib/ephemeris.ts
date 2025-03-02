@@ -1,9 +1,16 @@
 // Fall back to using sweph (which was already working) and handle both
 import sweph from 'sweph';
 import path from 'path';
+import nodeGeocoder from 'node-geocoder';
 
 // We'll use the original sweph package
 const swisseph = sweph;
+
+// Initialize the geocoder
+const geocoder = nodeGeocoder({
+  provider: 'openstreetmap',
+  // OpenStreetMap doesn't require additional options
+});
 
 // Initialize Swiss Ephemeris with the ephemeris data path
 const ephePath = path.join(process.cwd(), 'swisseph-master/ephe');
@@ -115,7 +122,52 @@ export function getZodiacSign(longitude: number): {
 function calculateHouses(julianDay: number, geoLat: number, geoLng: number, houseSystem = HOUSE_SYSTEMS.PLACIDUS) {
   try {
     const result = swisseph.houses(julianDay, geoLat, geoLng, houseSystem);
-    return result.house_cusps || [];
+    
+    // Access the house cusps via numeric indexing, as it appears to be an array-like object
+    // but we need to convert it to a proper array
+    const houseCusps: number[] = [];
+    
+    // Try to extract house cusps from the result
+    if (result) {
+      // First try accessing via known properties before trying numeric indices
+      // Cast to unknown first and then to Record to avoid TypeScript error
+      const resultAsRecord = (result as unknown) as Record<string | number, unknown>;
+      
+      if (Array.isArray(resultAsRecord.cusps)) {
+        return resultAsRecord.cusps.slice(0, 12);
+      }
+      
+      // Since we already defined resultAsRecord, now use it to check for numeric indices
+      let foundHouses = false;
+      
+      for (let i = 0; i < 12; i++) {
+        // Check if we can access house cusps directly by index
+        if (typeof resultAsRecord[i] === 'number') {
+          houseCusps.push(resultAsRecord[i] as number);
+          foundHouses = true;
+        }
+      }
+      
+      // If we found all house cusps
+      if (houseCusps.length === 12) {
+        return houseCusps;
+      }
+      
+      // Try other possible property names if we didn't find houses by numeric index
+      // (Already tried result.cusps above)
+      if (!foundHouses) {
+        // Check for other property names that might contain house cusps
+        const possibleProps = ['house_cusps', 'houseCusps', 'houses'];
+        for (const prop of possibleProps) {
+          if (Array.isArray((resultAsRecord as any)[prop])) {
+            return (resultAsRecord as any)[prop].slice(0, 12);
+          }
+        }
+      }
+    }
+    
+    // If we couldn't get the house cusps from the result, use our approximate method
+    return calculateApproximateHouseCusps(julianDay, geoLat, geoLng);
   } catch (error) {
     console.error('Error calculating houses:', error);
     // Return default array with 12 elements (each house at 0°)
@@ -191,8 +243,24 @@ function calculatePlanetPosition(julianDay: number, planet: number) {
     
     console.log(`Planet ${planet} calculation result:`, result);
     
-    // Extract the longitude and ensure it's a valid number
-    const longitude = result && typeof result.longitude === 'number' ? result.longitude : null;
+    // Extract the longitude from appropriate property based on the structure returned
+    let longitude: number | null = null;
+    
+    if (result) {
+      // Cast to unknown first, then to a record to safely access properties
+      const resultAsAny = (result as unknown) as Record<string | number, unknown>;
+      
+      // Try different property names that might contain the longitude
+      if (typeof resultAsAny.longitude === 'number') {
+        longitude = resultAsAny.longitude;
+      } else if (Array.isArray(resultAsAny.xx) && typeof resultAsAny.xx[0] === 'number') {
+        // Some implementations return the longitude as the first element of xx array
+        longitude = resultAsAny.xx[0];
+      } else if (typeof resultAsAny[0] === 'number') {
+        // Some implementations might return longitude as the first element
+        longitude = resultAsAny[0] as number;
+      }
+    }
     
     if (longitude === null) {
       console.error(`Invalid longitude result for planet ${planet}:`, result);
@@ -237,7 +305,7 @@ function getTestPlanetPosition(planet: number, julianDay?: number): number {
   let basePosition = 0;
   
   // Each planet's base position offset
-  const planetOffsets = {
+  const planetOffsets: Record<number, number> = {
     [swisseph.constants.SE_SUN]: 0,      
     [swisseph.constants.SE_MOON]: 30,    
     [swisseph.constants.SE_MERCURY]: 60, 
@@ -286,8 +354,36 @@ function calculateAscendant(julianDay: number, geoLat: number, geoLng: number) {
     console.log('Ascendant calculation result:', result);
     
     // Check if we got a valid result
-    if (result && typeof result.ascendant === 'number') {
-      return result.ascendant;
+    // Try different property names that might contain the ascendant
+    if (result) {
+      // Cast to unknown first and then to Record to avoid TypeScript error
+      const resultAsRecord = (result as unknown) as Record<string | number, unknown>;
+      
+      // Some implementations use 'ascendant' directly
+      if (typeof resultAsRecord.ascendant === 'number') {
+        return resultAsRecord.ascendant;
+      }
+      
+      // Some implementations use 'ascmc' array with ascendant at index 0
+      if (Array.isArray(resultAsRecord.ascmc) && typeof resultAsRecord.ascmc[0] === 'number') {
+        return resultAsRecord.ascmc[0];
+      }
+      
+      // Try other possible property names for ascendant
+      const possibleProps = ['asc', 'mc', 'ascmc'];
+      for (const prop of possibleProps) {
+        const value = resultAsRecord[prop];
+        if (Array.isArray(value) && typeof value[0] === 'number') {
+          return value[0]; // First value is typically the ascendant
+        } else if (typeof value === 'number') {
+          return value;
+        }
+      }
+      
+      // As a last resort, try numeric indices
+      if (typeof resultAsRecord[0] === 'number') {
+        return resultAsRecord[0] as number;
+      }
     }
     
     console.error('Invalid ascendant result:', result);
@@ -411,7 +507,7 @@ export async function calculateBirthChart(
     console.log('House cusps calculated:', houseCusps);
     
     // Format houses data
-    const houses = {};
+    const houses: Record<string, { cusp: number; name: string; symbol: string; degree: number }> = {};
     console.log('Formatting house data...');
     for (let i = 0; i < 12; i++) {
       // Make sure we have a valid cusp value, default to i*30 if not
@@ -443,7 +539,7 @@ export async function calculateBirthChart(
     
     // Format planetary data
     console.log('Formatting planetary data...');
-    const planets = {};
+    const planets: Record<string, { longitude: number; name: string; symbol: string; degree: number }> = {};
     for (const [planet, longitude] of Object.entries(positions)) {
       const zodiacSign = getZodiacSign(longitude || 0);
       planets[planet] = {
@@ -481,8 +577,8 @@ export async function calculateBirthChart(
 
 // Helper function to create a default chart when calculations fail
 function createDefaultChart() {
-  const planets = {};
-  const houses = {};
+  const planets: Record<string, { longitude: number; name: string; symbol: string; degree: number }> = {};
+  const houses: Record<string, { cusp: number; name: string; symbol: string; degree: number }> = {};
   
   // Create default planets
   for (const planet of ['sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto', 'ascendant']) {
@@ -521,8 +617,34 @@ export async function geocodeLocation(locationName: string): Promise<{
   formattedAddress: string;
 }> {
   try {
-    // Expanded mock data with more US cities and support for city+state format
-    const locations = {
+    console.log(`Geocoding location: "${locationName}"`);
+    
+    // Try to use node-geocoder to get real coordinates
+    try {
+      const results = await geocoder.geocode(locationName);
+      
+      if (results && results.length > 0) {
+        const location = results[0];
+        console.log(`Geocoded "${locationName}" to:`, location);
+        
+        if (location.latitude !== undefined && location.longitude !== undefined) {
+          return {
+            latitude: location.latitude,
+            longitude: location.longitude,
+            formattedAddress: location.formattedAddress || 
+                          `${location.city || ''}, ${location.state || ''}, ${location.country || ''}`.trim()
+          };
+        }
+      }
+      console.log(`No results found for "${locationName}" with geocoder, falling back to database`);
+    } catch (geocoderError) {
+      console.error('Error with geocoder:', geocoderError);
+      console.log('Falling back to database lookup');
+    }
+    
+    // Fallback to our database lookup for common locations
+    // Expanded database with more cities
+    const locations: Record<string, { latitude: number; longitude: number; formattedAddress: string }> = {
       // Major US cities
       'new york': { latitude: 40.7128, longitude: -74.006, formattedAddress: 'New York, NY, USA' },
       'los angeles': { latitude: 34.0522, longitude: -118.2437, formattedAddress: 'Los Angeles, CA, USA' },
@@ -563,22 +685,7 @@ export async function geocodeLocation(locationName: string): Promise<{
       'sao paulo': { latitude: -23.5505, longitude: -46.6333, formattedAddress: 'São Paulo, Brazil' },
     };
     
-    // Add state abbreviations to city matching
-    const stateAbbreviations = {
-      'al': 'alabama', 'ak': 'alaska', 'az': 'arizona', 'ar': 'arkansas', 
-      'ca': 'california', 'co': 'colorado', 'ct': 'connecticut', 'de': 'delaware',
-      'fl': 'florida', 'ga': 'georgia', 'hi': 'hawaii', 'id': 'idaho',
-      'il': 'illinois', 'in': 'indiana', 'ia': 'iowa', 'ks': 'kansas',
-      'ky': 'kentucky', 'la': 'louisiana', 'me': 'maine', 'md': 'maryland',
-      'ma': 'massachusetts', 'mi': 'michigan', 'mn': 'minnesota', 'ms': 'mississippi',
-      'mo': 'missouri', 'mt': 'montana', 'ne': 'nebraska', 'nv': 'nevada',
-      'nh': 'new hampshire', 'nj': 'new jersey', 'nm': 'new mexico', 'ny': 'new york',
-      'nc': 'north carolina', 'nd': 'north dakota', 'oh': 'ohio', 'ok': 'oklahoma',
-      'or': 'oregon', 'pa': 'pennsylvania', 'ri': 'rhode island', 'sc': 'south carolina',
-      'sd': 'south dakota', 'tn': 'tennessee', 'tx': 'texas', 'ut': 'utah',
-      'vt': 'vermont', 'va': 'virginia', 'wa': 'washington', 'wv': 'west virginia',
-      'wi': 'wisconsin', 'wy': 'wyoming', 'dc': 'district of columbia'
-    };
+
     
     const input = locationName.toLowerCase().trim();
     
@@ -606,14 +713,13 @@ export async function geocodeLocation(locationName: string): Promise<{
       }
     }
     
-    // Log the location search attempt
-    console.log(`Geocoding attempt for "${locationName}" not found in database`);
+    console.log(`Location "${locationName}" not found in database`);
     
-    // Return a more informative error message
+    // Return a more informative message if we couldn't find the location
     return {
       latitude: 0,
       longitude: 0,
-      formattedAddress: `Location "${locationName}" not found in our database. Try a major city name.`
+      formattedAddress: `Location "${locationName}" not found. Please try a major city name.`
     };
   } catch (error) {
     console.error('Error geocoding location:', error);
