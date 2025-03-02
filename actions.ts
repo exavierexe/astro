@@ -122,6 +122,30 @@ export const calculateBirthChart = async (formData: FormData) => {
       pluto: getPlanetInfo('pluto'),
     };
     
+    // Ensure JSON data is properly serialized for the database
+    let housesJson;
+    let aspectsJson;
+    
+    try {
+      // Convert houses object to JSON string if it's not already a string
+      if (chartData.houses && typeof chartData.houses !== 'string') {
+        housesJson = JSON.stringify(chartData.houses);
+      } else {
+        housesJson = chartData.houses || '{}';
+      }
+      
+      // Convert aspects array to JSON string if it's not already a string
+      if (chartData.aspects && typeof chartData.aspects !== 'string') {
+        aspectsJson = JSON.stringify(chartData.aspects);
+      } else {
+        aspectsJson = chartData.aspects || '[]';
+      }
+    } catch (jsonError) {
+      console.error("Error serializing JSON data:", jsonError);
+      housesJson = '{}';
+      aspectsJson = '[]';
+    }
+    
     // Save the birth chart to the database
     const birthChart = await prisma.birthChart.create({
       data: {
@@ -133,9 +157,9 @@ export const calculateBirthChart = async (formData: FormData) => {
         userId: userId ? parseInt(userId) : undefined,
         // Planet positions
         ...planetPositions,
-        // House and aspect data
-        houses: chartData.houses || {},
-        aspects: chartData.aspects || []
+        // House and aspect data properly serialized
+        houses: housesJson,
+        aspects: aspectsJson
       }
     });
 
@@ -342,6 +366,30 @@ export const updateBirthChart = async (chartId: number, formData: FormData) => {
       pluto: getPlanetInfo('pluto'),
     };
     
+    // Ensure JSON data is properly serialized for the database
+    let housesJson;
+    let aspectsJson;
+    
+    try {
+      // Convert houses object to JSON string if it's not already a string
+      if (chartData.houses && typeof chartData.houses !== 'string') {
+        housesJson = JSON.stringify(chartData.houses);
+      } else {
+        housesJson = chartData.houses || '{}';
+      }
+      
+      // Convert aspects array to JSON string if it's not already a string
+      if (chartData.aspects && typeof chartData.aspects !== 'string') {
+        aspectsJson = JSON.stringify(chartData.aspects);
+      } else {
+        aspectsJson = chartData.aspects || '[]';
+      }
+    } catch (jsonError) {
+      console.error("Error serializing JSON data:", jsonError);
+      housesJson = '{}';
+      aspectsJson = '[]';
+    }
+    
     // Update the birth chart in the database
     const updatedChart = await prisma.birthChart.update({
       where: { id: chartId },
@@ -352,8 +400,8 @@ export const updateBirthChart = async (chartId: number, formData: FormData) => {
         birthPlace: formattedAddress || birthPlace,
         notes,
         ...planetPositions,
-        houses: chartData.houses || {},
-        aspects: chartData.aspects || []
+        houses: housesJson,
+        aspects: aspectsJson
       }
     });
     
