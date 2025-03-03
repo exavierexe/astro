@@ -180,7 +180,7 @@ export async function calculateBirthChart(
       };
       
       output = execSync(command, { env: updatedEnv, encoding: 'utf8', timeout: 10000 });
-    } catch (execError) {
+    } catch (execError: any) {
       console.error('Failed to execute Swiss Ephemeris command:', execError.message || execError);
       throw new Error(`Failed to execute Swiss Ephemeris command: ${execError.message || execError}`);
     }
