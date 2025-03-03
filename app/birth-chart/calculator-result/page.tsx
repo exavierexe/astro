@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -26,7 +26,7 @@ const PLANET_SYMBOLS: Record<string, string> = {
   chiron: '⚷',         // Chiron
 };
 
-export default function BirthChartResultPage() {
+function ChartContent() {
   const searchParams = useSearchParams();
   const [chartData, setChartData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -422,5 +422,27 @@ export default function BirthChartResultPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function BirthChartResultPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen p-8 pt-24">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center py-8">
+            <div className="animate-pulse">
+              <div className="h-8 bg-gray-700 rounded-md mb-4 w-64 mx-auto"></div>
+              <div className="h-4 bg-gray-700 rounded-md mb-2 w-48 mx-auto"></div>
+              <div className="h-4 bg-gray-700 rounded-md mb-8 w-32 mx-auto"></div>
+              <div className="h-64 w-64 bg-gray-700 rounded-full mx-auto mb-8"></div>
+              <div className="h-4 bg-gray-700 rounded-md w-48 mx-auto"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    }>
+      <ChartContent />
+    </Suspense>
   );
 }

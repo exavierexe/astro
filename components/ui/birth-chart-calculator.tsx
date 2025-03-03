@@ -41,8 +41,9 @@ export function BirthChartCalculator() {
       } else {
         setChartData(result.data);
       }
-    } catch (err) {
-      setError('An unexpected error occurred. Please try again.');
+    } catch (err: any) {
+      const errorMessage = err.message || 'An unexpected error occurred. Please try again.';
+      setError(`Error: ${errorMessage}`);
       console.error('Error calculating birth chart:', err);
     } finally {
       setIsLoading(false);
@@ -63,7 +64,13 @@ export function BirthChartCalculator() {
         <form onSubmit={handleSubmit} className="space-y-5">
           {error && (
             <div className="p-3 bg-red-900/50 border border-red-600 rounded-md text-white">
-              {error}
+              <p className="font-medium mb-1">Error</p>
+              <p className="text-sm">{error}</p>
+              {error.includes('Swiss Ephemeris') && (
+                <p className="text-xs mt-2 text-gray-300">
+                  The Swiss Ephemeris calculation engine encountered an error. This might be due to missing libraries or configuration issues.
+                </p>
+              )}
             </div>
           )}
           

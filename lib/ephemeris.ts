@@ -141,7 +141,7 @@ export async function calculateBirthChart(
     // Check if the executable exists
     if (!fs.existsSync(sweTestPath)) {
       console.error('Swiss Ephemeris executable not found at:', sweTestPath);
-      return createDefaultChart(); // Fallback to default chart
+      throw new Error(`Swiss Ephemeris executable not found at: ${sweTestPath}`);
     }
     
     // Make sure the executable has the right permissions
@@ -170,17 +170,26 @@ export async function calculateBirthChart(
     // Execute the command
     let output;
     try {
-      output = execSync(command, { env, encoding: 'utf8', timeout: 10000 });
+      // Set the library path
+      const libraryPath = process.env.DYLD_LIBRARY_PATH || '';
+      const newLibraryPath = `${swissEphPath}:${process.cwd()}:${libraryPath}`;
+      
+      const updatedEnv = {
+        ...env,
+        DYLD_LIBRARY_PATH: newLibraryPath
+      };
+      
+      output = execSync(command, { env: updatedEnv, encoding: 'utf8', timeout: 10000 });
     } catch (execError) {
-      console.error('Error executing Swiss Ephemeris:', execError);
-      return createDefaultChart(); // Fallback to default chart
+      console.error('Failed to execute Swiss Ephemeris command:', execError.message || execError);
+      throw new Error(`Failed to execute Swiss Ephemeris command: ${execError.message || execError}`);
     }
     
     // Parse the output
     return parseBirthChartOutput(output, birthLat, birthLng);
   } catch (error) {
     console.error('Error calculating birth chart:', error);
-    return createDefaultChart(); // Fallback to default chart
+    throw error; // Propagate the error instead of using default chart
   }
 }
 

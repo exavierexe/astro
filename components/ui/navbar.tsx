@@ -25,6 +25,7 @@ export function NavBar() {
           <Link className="text-lg p-2 ml-8 md:ml-0 hover:bg-gray-700 rounded transition-colors" href="/magick">Magick</Link>
           <Link className="text-lg p-2 ml-8 md:ml-0 hover:bg-gray-700 rounded transition-colors" href="/alchemy">Alchemy</Link>
           <Link className="text-lg p-2 ml-8 md:ml-0 hover:bg-gray-700 rounded transition-colors" href="/library">Library</Link>
+          <Link className="text-lg p-2 ml-8 md:ml-0 hover:bg-gray-700 rounded transition-colors" href="/swisseph">Swiss Eph</Link>
           <span className="text-lg p-2 ml-8 md:ml-0 hover:bg-gray-700 rounded transition-colors">
             <SignedOut>
               <SignInButton>Login</SignInButton>

@@ -138,6 +138,139 @@ export const deleteTarotReading = async (readingId: number) => {
   }
 };
 
+// Swiss Ephemeris Direct Query Tool
+
+// Execute a direct query to Swiss Ephemeris
+export const querySwissEph = async (params: {
+  date: string;
+  time: string;
+}) => {
+  try {
+    const { date, time } = params;
+    
+    // Validate input
+    const dateRegex = /^\d{1,2}\.\d{1,2}\.\d{4}$/;
+    const timeRegex = /^\d{1,2}:\d{1,2}(:\d{1,2})?$/;
+    
+    if (!dateRegex.test(date)) {
+      return {
+        output: '',
+        error: 'Invalid date format. Please use DD.MM.YYYY format (e.g., 08.10.1995).'
+      };
+    }
+    
+    if (!timeRegex.test(time)) {
+      return {
+        output: '',
+        error: 'Invalid time format. Please use HH:MM or HH:MM:SS format (e.g., 19:56).'
+      };
+    }
+    
+    // Use Miami as a fixed location
+    const location = "Miami";
+    const geocodedLocation = await geocodeLocation(location);
+    
+    // Path to the Swiss Ephemeris binary
+    const swissEphPath = path.join(process.cwd(), 'swisseph-master');
+    const sweTestPath = path.join(swissEphPath, 'swetest');
+    
+    // Set up the environment
+    const env = {
+      ...process.env,
+      SE_EPHE_PATH: path.join(swissEphPath, 'ephe')
+    };
+    
+    // Ensure executable permissions
+    try {
+      fs.chmodSync(sweTestPath, 0o755);
+    } catch (chmodError) {
+      console.error('Error setting executable permissions:', chmodError);
+      // Continue anyway
+    }
+    
+    // Build the command
+    let command = `${sweTestPath} -b${date} -ut${time}`;
+    
+    // Add location parameters if we have valid coordinates
+    if (geocodedLocation.latitude !== 0 || geocodedLocation.longitude !== 0) {
+      command += ` -geopos${geocodedLocation.longitude},${geocodedLocation.latitude},0`;
+    }
+    
+    // Add default parameters
+    command += ' -p0123456789DAtj -fPlsj -eswe -head';
+    
+    console.log('Running Swiss Ephemeris command:', command);
+    
+    // Execute the command
+    let output;
+    try {
+      // Set the library path
+      const libraryPath = process.env.DYLD_LIBRARY_PATH || '';
+      const newLibraryPath = `${swissEphPath}:${process.cwd()}:${libraryPath}`;
+      
+      const updatedEnv = {
+        ...env,
+        DYLD_LIBRARY_PATH: newLibraryPath
+      };
+      
+      output = execSync(command, { env: updatedEnv, encoding: 'utf8', timeout: 15000 });
+    } catch (execError: any) {
+      console.error('Error executing Swiss Ephemeris:', execError);
+      
+      // Extract stdout if available
+      let extractedOutput = '';
+      if (execError.stdout) {
+        extractedOutput = execError.stdout.toString();
+        
+        // Format the output data
+        const formattedData = 
+`Date: ${date}
+Time: ${time}
+Location: ${geocodedLocation.formattedAddress}
+
+---- SWISS EPHEMERIS OUTPUT ----
+${extractedOutput}`;
+        
+        return {
+          output: formattedData,
+          error: 'Command executed with warnings, but data is available.'
+        };
+      }
+      
+      // No stdout available, show an error message
+      return {
+        output: `Date: ${date}\nTime: ${time}\nLocation: ${geocodedLocation.formattedAddress}\n\nNo output data available.`,
+        error: 'Failed to execute Swiss Ephemeris command. No data available.'
+      };
+    }
+    
+    // Check if output is empty or has an error
+    if (!output || output.trim() === '') {
+      return {
+        output: `Date: ${date}\nTime: ${time}\nLocation: ${geocodedLocation.formattedAddress}\n\nNo data returned from Swiss Ephemeris.`,
+        error: 'No output was generated. Please check the date and time format.'
+      };
+    }
+    
+    // Add location information to the output
+    const locationInfo = `
+Location: ${geocodedLocation.formattedAddress}
+Latitude: ${geocodedLocation.latitude}
+Longitude: ${geocodedLocation.longitude}
+
+---- SWISS EPHEMERIS OUTPUT ----
+${output}`;
+    
+    return { output: locationInfo };
+  } catch (error: any) {
+    console.error('Error executing Swiss Ephemeris query:', error);
+    return {
+      output: '',
+      error: `Error: ${error.message}`
+    };
+  }
+};
+
 // Birth Chart Calculator Actions
 
 // Calculate a birth chart using Swiss Ephemeris binary directly
@@ -272,18 +405,25 @@ export const calculateBirthChartWithSwissEph = async (params: {
     } else {
       // Use only our JavaScript implementation
       console.log('Using JavaScript implementation for chart calculation');
-      const fullChartData = await calculateEphemerisChart(
-        birthDateTime,
-        geocodedLocation.latitude,
-        geocodedLocation.longitude
-      );
-      
-      // Format the data
-      chartData = {
-        ...fullChartData,
-        birthLocationFormatted: geocodedLocation.formattedAddress,
-        calculationMethod: 'JavaScript Implementation'
-      };
+      try {
+        const fullChartData = await calculateEphemerisChart(
+          birthDateTime,
+          geocodedLocation.latitude,
+          geocodedLocation.longitude
+        );
+        
+        // Format the data
+        chartData = {
+          ...fullChartData,
+          birthLocationFormatted: geocodedLocation.formattedAddress,
+          calculationMethod: 'JavaScript Implementation'
+        };
+      } catch (ephemerisError: any) {
+        console.error('Error in ephemeris calculation:', ephemerisError);
+        return {
+          error: `Failed to calculate birth chart: ${ephemerisError.message || 'Unknown error'}`
+        };
+      }
     }
     
     console.log('Birth chart calculated successfully');
