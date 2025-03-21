@@ -350,9 +350,30 @@ export const querySwissEph = async (params: {
     // Subtract the timezone offset to get UTC time in minutes
     let totalUtcMinutes = totalLocalMinutes - timeZoneInfo.totalOffsetMinutes;
     
-    // Convert back to hours and minutes
-    let utcHour = Math.floor(totalUtcMinutes / 60);
-    let utcMinute = totalUtcMinutes % 60;
+    // Since JavaScript % operator doesn't work properly with negative numbers for our purposes,
+    // we need a special handling to get the correct hour and minute
+    // This ensures proper handling of negative minutes (like -30 becoming 23:30)
+    let utcHour, utcMinute;
+    
+    if (totalUtcMinutes < 0) {
+        // For negative total minutes, we need to calculate the correct hour and minute
+        // Example: -30 minutes should be 23:30 from the previous day
+        const absMinutes = Math.abs(totalUtcMinutes);
+        utcHour = Math.floor(absMinutes / 60);
+        utcMinute = absMinutes % 60;
+        
+        // Convert to the correct "negative time"
+        if (utcMinute === 0) {
+            utcHour = 24 - utcHour;
+        } else {
+            utcHour = 23 - utcHour;
+            utcMinute = 60 - utcMinute;
+        }
+    } else {
+        // For positive total minutes, the standard calculation works
+        utcHour = Math.floor(totalUtcMinutes / 60);
+        utcMinute = totalUtcMinutes % 60;
+    }
     
     // Initialize UTC date components
     let utcSecond = localSecond;
@@ -762,21 +783,36 @@ export const calculateBirthChartWithSwissEph = async (params: {
     // Subtract the timezone offset to get UTC time in minutes
     let totalUtcMinutes = totalLocalMinutes - timeZoneInfo.totalOffsetMinutes;
     
-    // Convert back to hours and minutes
-    let utcHour = Math.floor(totalUtcMinutes / 60);
-    let utcMinute = totalUtcMinutes % 60;
+    // Since JavaScript % operator doesn't work properly with negative numbers for our purposes,
+    // we need a special handling to get the correct hour and minute
+    // This ensures proper handling of negative minutes (like -30 becoming 23:30)
+    let utcHour, utcMinute;
+    
+    if (totalUtcMinutes < 0) {
+        // For negative total minutes, we need to calculate the correct hour and minute
+        // Example: -30 minutes should be 23:30 from the previous day
+        const absMinutes = Math.abs(totalUtcMinutes);
+        utcHour = Math.floor(absMinutes / 60);
+        utcMinute = absMinutes % 60;
+        
+        // Convert to the correct "negative time"
+        if (utcMinute === 0) {
+            utcHour = 24 - utcHour;
+        } else {
+            utcHour = 23 - utcHour;
+            utcMinute = 60 - utcMinute;
+        }
+    } else {
+        // For positive total minutes, the standard calculation works
+        utcHour = Math.floor(totalUtcMinutes / 60);
+        utcMinute = totalUtcMinutes % 60;
+    }
     
     // Initialize UTC date components
     let utcDay = birthDay;
     let utcMonth = birthMonth;
     let utcYear = birthYear;
     let utcSecond = 0; // Initialize seconds to 0 by default
-    
-    // Handle negative minutes (shouldn't happen with our calculation, but just in case)
-    if (utcMinute < 0) {
-      utcMinute += 60;
-      utcHour -= 1;
-    }
     
     // Handle day boundary crossing if hours are outside 0-23 range
     // For times before midnight (negative hours)

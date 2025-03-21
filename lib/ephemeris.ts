@@ -55,7 +55,7 @@ function loadTimeZoneData(): Map<string, any> {
     const fileContent = fs.readFileSync(csvPath, 'utf8');
     
     // Parse CSV data
-    // Format: Zone_Name,Country_Code,Zone_Type,GMT_Offset,DST_Offset,Raw_Offset
+    // Format: Zone_Name,Country_Code,Zone_Type,Start_Time,UTC_Offset,DST_Flag
     const lines = fileContent.split('\n');
     
     // Process entries in reverse order to get the most recent entries first
@@ -91,10 +91,17 @@ function loadTimeZoneData(): Map<string, any> {
     processedZones.clear();
     
     // Process zones and add them to our map
-    // First, identify the most recent time zone entry for each zone based on the current date
-    const now = Math.floor(Date.now() / 1000); // Current Unix timestamp in seconds
-    const currentTimeZones = new Map();
+    // We need to identify the most recent time zone entry for each zone based on the current date
     
+    // Current timestamp - but let's move it forward slightly to ensure we're using the most current rules
+    // This helps with DST transitions that might be upcoming
+    const now = Math.floor(Date.now() / 1000); // Current Unix timestamp in seconds
+    const futureNow = now + (60 * 60 * 24 * 7); // Look ahead 1 week to catch upcoming DST changes
+    
+    // Store time zones by zone name
+    const zoneEntries: Record<string, any[]> = {};
+    
+    // First pass - collect all entries for each zone
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       if (!line.trim()) continue;
@@ -104,7 +111,7 @@ function loadTimeZoneData(): Map<string, any> {
       
       const zoneName = parts[0];
       const countryCode = parts[1];
-      const zoneType = parts[2];    // LMT, UTC, EST, EDT, etc.
+      const zoneType = parts[2];      // LMT, UTC, EST, EDT, etc.
       const startTime = parseInt(parts[3]) || 0;  // Unix timestamp when this rule starts
       const utcOffset = parseInt(parts[4]) || 0;  // UTC offset in seconds
       const isDst = parseInt(parts[5]) === 1;     // 1 for DST, 0 for standard time
@@ -112,86 +119,125 @@ function loadTimeZoneData(): Map<string, any> {
       // Skip historical Local Mean Time entries
       if (zoneType === 'LMT') continue;
       
-      // If this rule is applicable now (start time is in the past)
-      if (startTime <= now) {
-        // If we haven't seen this zone yet, or if this is a more recent rule
-        const current = currentTimeZones.get(zoneName);
-        if (!current || startTime > current.startTime) {
-          currentTimeZones.set(zoneName, {
-            zoneName,
-            countryCode,
-            zoneType,
-            utcOffset,
-            startTime,
-            isDst,
-            isExclusive: countryCounts[countryCode] === 1
-          });
+      // Add this entry to our collection for the zone
+      if (!zoneEntries[zoneName]) {
+        zoneEntries[zoneName] = [];
+      }
+      
+      zoneEntries[zoneName].push({
+        zoneName,
+        countryCode,
+        zoneType,
+        startTime,
+        utcOffset,
+        isDst,
+        isExclusive: countryCounts[countryCode] === 1
+      });
+    }
+    
+    // Second pass - find the most current entry for each zone
+    for (const [zoneName, entries] of Object.entries(zoneEntries)) {
+      // Sort entries by start time (newest first)
+      entries.sort((a, b) => b.startTime - a.startTime);
+      
+      // Find the most recent entry that is applicable now
+      let currentEntry = null;
+      
+      for (const entry of entries) {
+        if (entry.startTime <= futureNow) {
+          currentEntry = entry;
+          break;
+        }
+      }
+      
+      // If we found a current entry, add it to our map
+      if (currentEntry) {
+        timeZonesMap.set(zoneName, {
+          zoneName: currentEntry.zoneName,
+          countryCode: currentEntry.countryCode,
+          zoneType: currentEntry.zoneType,
+          utcOffset: currentEntry.utcOffset,
+          isDst: currentEntry.isDst,
+          isExclusive: currentEntry.isExclusive
+        });
+        
+        // Log for debugging
+        if (!processedZones.has(zoneName)) {
+          processedZones.add(zoneName);
+          console.log(`Using timezone rule for ${zoneName}: ${currentEntry.zoneType}, offset ${currentEntry.utcOffset} seconds, DST: ${currentEntry.isDst ? 'Yes' : 'No'}`);
         }
       }
     }
     
-    // Now store the most current time zone rules in our cache
-    for (const [zoneName, data] of currentTimeZones.entries()) {
-      timeZonesMap.set(zoneName, {
-        zoneName,
-        countryCode: data.countryCode,
-        zoneType: data.zoneType,
-        utcOffset: data.utcOffset,
-        isDst: data.isDst,
-        isExclusive: countryCounts[data.countryCode] === 1 // True if this is the only zone for this country
-      });
+    // Add common aliases for convenience
+    const aliasMap: Record<string, string> = {
+      // US Time Zones
+      'America/New_York': 'US/Eastern',
+      'America/Los_Angeles': 'US/Pacific',
+      'America/Chicago': 'US/Central',
+      'America/Denver': 'US/Mountain',
+      'Pacific/Honolulu': 'US/Hawaii',
+      'America/Anchorage': 'US/Alaska',
       
-      // Mark as processed for logging
-      if (!processedZones.has(zoneName)) {
-        processedZones.add(zoneName);
-        console.log(`Using timezone rule for ${zoneName}: ${data.zoneType}, offset ${data.utcOffset} seconds, DST: ${data.isDst ? 'Yes' : 'No'}`);
-      }
+      // Australian Time Zones
+      'Australia/Sydney': 'Australia/NSW',
+      'Australia/Melbourne': 'Australia/Victoria',
       
-      // Add common aliases for US time zones
-      // This is a simplified approach - a complete solution would use a proper alias table
-      if (zoneName === 'America/New_York') {
-        timeZonesMap.set('US/Eastern', {
-          zoneName: 'US/Eastern',
-          countryCode: 'US',
-          zoneType: data.zoneType, // Use current zone type (EST or EDT)
-          utcOffset: data.utcOffset, // Use correct current offset
-          isDst: data.isDst,
+      // European Time Zones
+      'Europe/London': 'GB',
+      'Europe/Paris': 'Europe/France',
+      'Europe/Berlin': 'Europe/Germany',
+      
+      // Asia Time Zones
+      'Asia/Tokyo': 'Japan',
+      'Asia/Shanghai': 'China'
+    };
+    
+    // Create the aliases
+    for (const [canonicalName, alias] of Object.entries(aliasMap)) {
+      if (timeZonesMap.has(canonicalName)) {
+        const sourceData = timeZonesMap.get(canonicalName);
+        
+        timeZonesMap.set(alias, {
+          zoneName: alias,
+          countryCode: sourceData.countryCode,
+          zoneType: sourceData.zoneType,
+          utcOffset: sourceData.utcOffset,
+          isDst: sourceData.isDst,
           isAlias: true,
-          canonicalName: 'America/New_York'
-        });
-      } else if (zoneName === 'America/Los_Angeles') {
-        timeZonesMap.set('US/Pacific', {
-          zoneName: 'US/Pacific',
-          countryCode: 'US',
-          zoneType: data.zoneType, // Use current zone type (PST or PDT)
-          utcOffset: data.utcOffset, // Use correct current offset
-          isDst: data.isDst,
-          isAlias: true,
-          canonicalName: 'America/Los_Angeles'
-        });
-      } else if (zoneName === 'America/Chicago') {
-        timeZonesMap.set('US/Central', {
-          zoneName: 'US/Central',
-          countryCode: 'US',
-          zoneType: data.zoneType, // Use current zone type (CST or CDT)
-          utcOffset: data.utcOffset, // Use correct current offset
-          isDst: data.isDst,
-          isAlias: true,
-          canonicalName: 'America/Chicago'
+          canonicalName: canonicalName
         });
       }
     }
     
+    // Add special case for the most common Pacific locations
+    // Pacific/Auckland is particularly important to handle correctly for New Zealand
+    if (timeZonesMap.has('Pacific/Auckland')) {
+      const aucklandData = timeZonesMap.get('Pacific/Auckland');
+      console.log(`Pacific/Auckland timezone settings: offset ${aucklandData.utcOffset} seconds, DST: ${aucklandData.isDst ? 'Yes' : 'No'}`);
+      
+      // Add NZ as an alias for Pacific/Auckland
+      timeZonesMap.set('NZ', {
+        zoneName: 'NZ', 
+        countryCode: 'NZ',
+        zoneType: aucklandData.zoneType,
+        utcOffset: aucklandData.utcOffset,
+        isDst: aucklandData.isDst,
+        isAlias: true,
+        canonicalName: 'Pacific/Auckland'
+      });
+    }
+    
     console.log(`Loaded ${timeZonesMap.size} time zones from TimeZoneDB (including aliases)`);
     
-    // Debug output - show a few sample zones
-    for (const country of ['US', 'GB', 'JP', 'AU']) {
+    // Debug output - show key sample zones
+    for (const country of ['US', 'GB', 'JP', 'AU', 'NZ']) {
       console.log(`Sample timezones for ${country}:`);
       let found = 0;
       for (const [name, data] of timeZonesMap.entries()) {
         if (data.countryCode === country && found < 2) {
           found++;
-          console.log(`  ${name}: ${data.countryCode}, ${data.zoneType}, offset: ${data.utcOffset} seconds`);
+          console.log(`  ${name}: ${data.countryCode}, ${data.zoneType}, offset: ${data.utcOffset} seconds, DST: ${data.isDst ? 'Yes' : 'No'}`);
         }
       }
     }
@@ -240,7 +286,7 @@ const FALLBACK_LOCATIONS: Record<string, {
   longitude: number; 
   formattedAddress: string;
   countryCode: string;
-  utcOffset?: number; // Optional UTC offset in seconds
+  timeZoneName?: string; // IANA Timezone name (e.g., 'America/New_York')
 }> = {
   // North America - Major US cities
   'new york': { 
@@ -248,28 +294,28 @@ const FALLBACK_LOCATIONS: Record<string, {
     longitude: -74.006, 
     formattedAddress: 'New York, NY, USA',
     countryCode: 'US',
-    utcOffset: -18000 // UTC-5 (EST)
+    timeZoneName: 'America/New_York'
   },
   'los angeles': { 
     latitude: 34.0522, 
     longitude: -118.2437, 
     formattedAddress: 'Los Angeles, CA, USA',
     countryCode: 'US',
-    utcOffset: -28800 // UTC-8 (PST)
+    timeZoneName: 'America/Los_Angeles'
   },
   'chicago': { 
     latitude: 41.8781, 
     longitude: -87.6298, 
     formattedAddress: 'Chicago, IL, USA',
     countryCode: 'US',
-    utcOffset: -21600 // UTC-6 (CST)
+    timeZoneName: 'America/Chicago'
   },
   'miami': { 
     latitude: 25.7617, 
     longitude: -80.1918, 
     formattedAddress: 'Miami, FL, USA',
     countryCode: 'US',
-    utcOffset: -18000 // UTC-5 (EST)
+    timeZoneName: 'America/New_York'
   },
   
   // Europe
@@ -278,28 +324,28 @@ const FALLBACK_LOCATIONS: Record<string, {
     longitude: -0.1278, 
     formattedAddress: 'London, UK',
     countryCode: 'GB',
-    utcOffset: 0 // UTC+0
+    timeZoneName: 'Europe/London'
   },
   'paris': { 
     latitude: 48.8566, 
     longitude: 2.3522, 
     formattedAddress: 'Paris, France',
     countryCode: 'FR',
-    utcOffset: 3600 // UTC+1
+    timeZoneName: 'Europe/Paris'
   },
   'berlin': { 
     latitude: 52.5200, 
     longitude: 13.4050, 
     formattedAddress: 'Berlin, Germany',
     countryCode: 'DE',
-    utcOffset: 3600 // UTC+1
+    timeZoneName: 'Europe/Berlin'
   },
   'rome': { 
     latitude: 41.9028, 
     longitude: 12.4964, 
     formattedAddress: 'Rome, Italy',
     countryCode: 'IT',
-    utcOffset: 3600 // UTC+1
+    timeZoneName: 'Europe/Rome'
   },
   
   // Asia
@@ -308,21 +354,21 @@ const FALLBACK_LOCATIONS: Record<string, {
     longitude: 139.6503, 
     formattedAddress: 'Tokyo, Japan',
     countryCode: 'JP',
-    utcOffset: 32400 // UTC+9 (JST)
+    timeZoneName: 'Asia/Tokyo'
   },
   'beijing': { 
     latitude: 39.9042, 
     longitude: 116.4074, 
     formattedAddress: 'Beijing, China',
     countryCode: 'CN',
-    utcOffset: 28800 // UTC+8
+    timeZoneName: 'Asia/Shanghai'
   },
   'delhi': { 
     latitude: 28.7041, 
     longitude: 77.1025, 
     formattedAddress: 'Delhi, India',
     countryCode: 'IN',
-    utcOffset: 19800 // UTC+5:30
+    timeZoneName: 'Asia/Kolkata'
   },
   
   // Australia and Oceania
@@ -331,21 +377,21 @@ const FALLBACK_LOCATIONS: Record<string, {
     longitude: 151.2093, 
     formattedAddress: 'Sydney, Australia',
     countryCode: 'AU',
-    utcOffset: 36000 // UTC+10
+    timeZoneName: 'Australia/Sydney'
   },
   'melbourne': { 
     latitude: -37.8136, 
     longitude: 144.9631, 
     formattedAddress: 'Melbourne, Australia',
     countryCode: 'AU',
-    utcOffset: 36000 // UTC+10
+    timeZoneName: 'Australia/Melbourne'
   },
   'auckland': { 
     latitude: -36.8509, 
     longitude: 174.7645, 
     formattedAddress: 'Auckland, New Zealand',
     countryCode: 'NZ',
-    utcOffset: 43200 // UTC+12
+    timeZoneName: 'Pacific/Auckland'
   }
 };
 
@@ -686,18 +732,29 @@ export async function geocodeLocation(locationName: string): Promise<{
     if (FALLBACK_LOCATIONS[input]) {
       console.log('Using fallback location database for:', input);
       
-      // Create a timeZone object if utcOffset is provided
       const location = FALLBACK_LOCATIONS[input];
-      if (location.utcOffset !== undefined) {
-        return {
-          ...location,
-          timeZone: {
-            zoneName: `Hardcoded_${location.formattedAddress}`,
-            utcOffset: location.utcOffset,
-            isDst: false, // We don't handle DST in hardcoded values
-            countryName: location.formattedAddress.split(',').pop()?.trim() || location.countryCode
-          }
-        };
+      
+      // If a time zone name is specified, look it up in our time zone database
+      if (location.timeZoneName) {
+        const timeZones = loadTimeZoneData();
+        if (timeZones.has(location.timeZoneName)) {
+          const tzData = timeZones.get(location.timeZoneName);
+          const countryName = loadCountryData().get(location.countryCode) || location.countryCode;
+          
+          console.log(`Found time zone ${location.timeZoneName} for ${input}: offset ${tzData.utcOffset} seconds, DST: ${tzData.isDst ? 'Yes' : 'No'}`);
+          
+          return {
+            ...location,
+            timeZone: {
+              zoneName: location.timeZoneName,
+              utcOffset: tzData.utcOffset,
+              isDst: tzData.isDst,
+              countryName
+            }
+          };
+        } else {
+          console.log(`Time zone ${location.timeZoneName} not found in database for ${input}`);
+        }
       }
       
       return location;
@@ -709,17 +766,27 @@ export async function geocodeLocation(locationName: string): Promise<{
       const location = FALLBACK_LOCATIONS[parts[0]];
       console.log('Using fallback location database for city part:', parts[0]);
       
-      // Create a timeZone object if utcOffset is provided
-      if (location.utcOffset !== undefined) {
-        return {
-          ...location,
-          timeZone: {
-            zoneName: `Hardcoded_${location.formattedAddress}`,
-            utcOffset: location.utcOffset,
-            isDst: false, // We don't handle DST in hardcoded values
-            countryName: location.formattedAddress.split(',').pop()?.trim() || location.countryCode
-          }
-        };
+      // If a time zone name is specified, look it up in our time zone database
+      if (location.timeZoneName) {
+        const timeZones = loadTimeZoneData();
+        if (timeZones.has(location.timeZoneName)) {
+          const tzData = timeZones.get(location.timeZoneName);
+          const countryName = loadCountryData().get(location.countryCode) || location.countryCode;
+          
+          console.log(`Found time zone ${location.timeZoneName} for ${parts[0]}: offset ${tzData.utcOffset} seconds, DST: ${tzData.isDst ? 'Yes' : 'No'}`);
+          
+          return {
+            ...location,
+            timeZone: {
+              zoneName: location.timeZoneName,
+              utcOffset: tzData.utcOffset,
+              isDst: tzData.isDst,
+              countryName
+            }
+          };
+        } else {
+          console.log(`Time zone ${location.timeZoneName} not found in database for ${parts[0]}`);
+        }
       }
       
       return location;
@@ -730,17 +797,27 @@ export async function geocodeLocation(locationName: string): Promise<{
       if (input.includes(key) || key.includes(input)) {
         console.log('Using fallback location database for partial match:', key);
         
-        // Create a timeZone object if utcOffset is provided
-        if (data.utcOffset !== undefined) {
-          return {
-            ...data,
-            timeZone: {
-              zoneName: `Hardcoded_${data.formattedAddress}`,
-              utcOffset: data.utcOffset,
-              isDst: false, // We don't handle DST in hardcoded values
-              countryName: data.formattedAddress.split(',').pop()?.trim() || data.countryCode
-            }
-          };
+        // If a time zone name is specified, look it up in our time zone database
+        if (data.timeZoneName) {
+          const timeZones = loadTimeZoneData();
+          if (timeZones.has(data.timeZoneName)) {
+            const tzData = timeZones.get(data.timeZoneName);
+            const countryName = loadCountryData().get(data.countryCode) || data.countryCode;
+            
+            console.log(`Found time zone ${data.timeZoneName} for ${key}: offset ${tzData.utcOffset} seconds, DST: ${tzData.isDst ? 'Yes' : 'No'}`);
+            
+            return {
+              ...data,
+              timeZone: {
+                zoneName: data.timeZoneName,
+                utcOffset: tzData.utcOffset,
+                isDst: tzData.isDst,
+                countryName
+              }
+            };
+          } else {
+            console.log(`Time zone ${data.timeZoneName} not found in database for ${key}`);
+          }
         }
         
         return data;
@@ -770,23 +847,36 @@ export async function geocodeLocation(locationName: string): Promise<{
         console.log('Error occurred, using fallback location database');
         const location = FALLBACK_LOCATIONS[input];
         
-        // Create a timeZone object if utcOffset is provided
-        if (location.utcOffset !== undefined) {
-          return {
-            ...location,
-            timeZone: {
-              zoneName: `Hardcoded_${location.formattedAddress}`,
-              utcOffset: location.utcOffset,
-              isDst: false,
-              countryName: location.formattedAddress.split(',').pop()?.trim() || location.countryCode
+        // If a time zone name is specified, look it up in our time zone database
+        if (location.timeZoneName) {
+          try {
+            const timeZones = loadTimeZoneData();
+            if (timeZones.has(location.timeZoneName)) {
+              const tzData = timeZones.get(location.timeZoneName);
+              const countryName = loadCountryData().get(location.countryCode) || location.countryCode;
+              
+              console.log(`Found time zone ${location.timeZoneName} for ${input}: offset ${tzData.utcOffset} seconds, DST: ${tzData.isDst ? 'Yes' : 'No'}`);
+              
+              return {
+                ...location,
+                timeZone: {
+                  zoneName: location.timeZoneName,
+                  utcOffset: tzData.utcOffset,
+                  isDst: tzData.isDst,
+                  countryName
+                }
+              };
             }
-          };
+          } catch (tzError) {
+            console.error('Error loading timezone data for fallback:', tzError);
+          }
         }
         
         return location;
       }
     } catch (e) {
       // Ignore errors in fallback
+      console.error('Error in location fallback:', e);
     }
     
     return {
