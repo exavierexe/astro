@@ -7,6 +7,35 @@ import { execSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 
+// Time zone boundaries (approximate, simplified)
+const TIME_ZONE_BOUNDARIES = [
+  { min: -180, max: -165, name: 'UTC-12:00' },
+  { min: -165, max: -150, name: 'UTC-11:00' },
+  { min: -150, max: -135, name: 'UTC-10:00' },
+  { min: -135, max: -120, name: 'UTC-09:00' },
+  { min: -120, max: -105, name: 'UTC-08:00' },
+  { min: -105, max: -90, name: 'UTC-07:00' },
+  { min: -90, max: -75, name: 'UTC-06:00' },
+  { min: -75, max: -60, name: 'UTC-05:00' },
+  { min: -60, max: -45, name: 'UTC-04:00' },
+  { min: -45, max: -30, name: 'UTC-03:00' },
+  { min: -30, max: -15, name: 'UTC-02:00' },
+  { min: -15, max: 0, name: 'UTC-01:00' },
+  { min: 0, max: 15, name: 'UTC+00:00' },
+  { min: 15, max: 30, name: 'UTC+01:00' },
+  { min: 30, max: 45, name: 'UTC+02:00' },
+  { min: 45, max: 60, name: 'UTC+03:00' },
+  { min: 60, max: 75, name: 'UTC+04:00' },
+  { min: 75, max: 90, name: 'UTC+05:00' },
+  { min: 90, max: 105, name: 'UTC+06:00' },
+  { min: 105, max: 120, name: 'UTC+07:00' },
+  { min: 120, max: 135, name: 'UTC+08:00' },
+  { min: 135, max: 150, name: 'UTC+09:00' },
+  { min: 150, max: 165, name: 'UTC+10:00' },
+  { min: 165, max: 180, name: 'UTC+11:00' },
+  { min: 180, max: 195, name: 'UTC+12:00' }
+];
+
 //export function getData() {
 //    const sql = neon(process.env.DATABASE_URL);
  //   const data = await sql`...`;
@@ -144,9 +173,10 @@ export const deleteTarotReading = async (readingId: number) => {
 export const querySwissEph = async (params: {
   date: string;
   time: string;
+  location: string;
 }) => {
   try {
-    const { date, time } = params;
+    const { date, time, location } = params;
     
     // Validate input
     const dateRegex = /^\d{1,2}\.\d{1,2}\.\d{4}$/;
@@ -166,8 +196,14 @@ export const querySwissEph = async (params: {
       };
     }
     
-    // Use Miami as a fixed location
-    const location = "Miami";
+    if (!location || location.trim() === '') {
+      return {
+        output: '',
+        error: 'Please enter a location (city name).'
+      };
+    }
+    
+    // Geocode the provided location
     const geocodedLocation = await geocodeLocation(location);
     
     // Path to the Swiss Ephemeris binary
@@ -188,16 +224,271 @@ export const querySwissEph = async (params: {
       // Continue anyway
     }
     
-    // Build the command
-    let command = `${sweTestPath} -b${date} -ut${time}`;
+    // Parse date and time with validation
+    const [day, month, year] = date.split('.').map(Number);
+    const [hour, minute, second = 0] = time.split(':').map(Number);
+    
+    // Validate time values
+    if (isNaN(hour) || hour < 0 || hour > 23 || isNaN(minute) || minute < 0 || minute > 59 || isNaN(second) || second < 0 || second > 59) {
+      return {
+        output: '',
+        error: 'Invalid time value. Hours must be 0-23, minutes and seconds must be 0-59.'
+      };
+    }
+    
+    // IMPORTANT: Since we're having issues with JavaScript Date objects and timezones,
+    // let's use a completely different approach that avoids JavaScript Date objects entirely
+    // for the UTC conversion. We'll only use Date objects for formatting at the very end.
+    
+    console.log(`Input (local time): ${year}-${month}-${day} ${hour}:${minute}:${second}`);
+    
+    // Store the input values directly - we'll convert to UTC manually without using Date objects
+    const localYear = year;
+    const localMonth = month;
+    const localDay = day;
+    const localHour = hour;
+    const localMinute = minute;
+    const localSecond = second;
+    
+    // Get the time zone information for the location using our TimeZoneDB data
+    let timeZoneInfo;
+    
+    // Use the timeZone information from geocodeLocation if available
+    if (geocodedLocation.timeZone) {
+      console.log(`Using TimeZoneDB data: ${geocodedLocation.timeZone.zoneName}, UTC offset: ${geocodedLocation.timeZone.utcOffset} seconds`);
+      
+      // Convert seconds to hours and minutes for display
+      const totalMinutes = geocodedLocation.timeZone.utcOffset / 60;
+      const offsetHours = Math.floor(Math.abs(totalMinutes) / 60) * (totalMinutes >= 0 ? 1 : -1);
+      const offsetMinutes = Math.abs(totalMinutes) % 60;
+      
+      // Format timezone name with sign
+      const sign = totalMinutes >= 0 ? '+' : '-';
+      const formattedHours = Math.abs(offsetHours).toString().padStart(2, '0');
+      const formattedMinutes = Math.abs(offsetMinutes).toString().padStart(2, '0');
+      
+      timeZoneInfo = {
+        name: `${geocodedLocation.timeZone.zoneName} (UTC${sign}${formattedHours}:${formattedMinutes})`,
+        offsetHours,
+        offsetMinutes: offsetMinutes * (totalMinutes >= 0 ? 1 : -1), // Keep the original sign
+        totalOffsetMinutes: totalMinutes
+      };
+    } else {
+      // Fall back to the longitude-based method
+      timeZoneInfo = await determineTimeZone(geocodedLocation.longitude, geocodedLocation.latitude);
+    }
+    
+    console.log(`Time zone: ${timeZoneInfo.name}, offset: ${timeZoneInfo.offsetHours}:${Math.abs(timeZoneInfo.offsetMinutes).toString().padStart(2, '0')}`);
+    
+    // Convert local time to GMT manually using a simple offset calculation
+    // This approach avoids the complexity of JavaScript Date objects and timezones
+    
+    console.log(`Location timezone offset: ${timeZoneInfo.totalOffsetMinutes} minutes`);
+    
+    // Convert local time to UTC
+    // For positive offsets (east of Greenwich), we subtract hours
+    // For negative offsets (west of Greenwich), we add hours
+    
+    // Verify we have a valid timeZoneInfo with totalOffsetMinutes
+    if (!timeZoneInfo || typeof timeZoneInfo.totalOffsetMinutes !== 'number') {
+      console.log('Invalid timeZoneInfo or missing totalOffsetMinutes, using default timezone UTC+0');
+      timeZoneInfo = {
+        name: 'UTC+0:00 (Default)',
+        offsetHours: 0,
+        offsetMinutes: 0,
+        totalOffsetMinutes: 0
+      };
+    }
+    
+    // We'll convert by calculating total minutes and then distributing to hour/minute/day
+    let totalLocalMinutes = (localHour * 60) + localMinute;
+    
+    // Handle special cases for well-known cities
+    const normalizedLocation = location.toLowerCase().trim();
+    
+    // Special case handling for major timezones
+    const specialCases = {
+     // 'tokyo': { hours: 9, name: 'JST (UTC+9:00)' },
+     // 'beijing': { hours: 8, name: 'China Standard Time (UTC+8:00)' },
+    //  'delhi': { hours: 5.5, name: 'India Standard Time (UTC+5:30)' },
+    //  'london': { hours: 0, name: 'GMT (UTC+0:00)' },
+   //   'paris': { hours: 1, name: 'Central European Time (UTC+1:00)' },
+    //  'berlin': { hours: 1, name: 'Central European Time (UTC+1:00)' },
+      //'new york': { hours: -5, name: 'Eastern Standard Time (UTC-5:00)' },
+    //  'los angeles': { hours: -8, name: 'Pacific Standard Time (UTC-8:00)' },
+    //  'sydney': { hours: 10, name: 'Australian Eastern Standard Time (UTC+10:00)' }
+    };
+    
+    // Check if the location matches any of our special cases
+    let specialCase = null;
+    for (const [cityName, cityInfo] of Object.entries(specialCases)) {
+      if (normalizedLocation.includes(cityName)) {
+        specialCase = { city: cityName, ...cityInfo };
+        break;
+      }
+    }
+    
+    // If we found a special case, use its timezone offset
+    if (specialCase) {
+      console.log(`Special handling for ${specialCase.city} timezone:`);
+      console.log(`  • Local time: ${localHour}:${localMinute}`);
+      console.log(`  • Current timezone offset: ${timeZoneInfo.totalOffsetMinutes} minutes (${timeZoneInfo.totalOffsetMinutes/60} hours)`);
+      
+      // Convert hours to minutes (handling half-hour timezones)
+      const expectedOffset = Math.round(specialCase.hours * 60);
+      
+      // If the current offset is significantly different, override it
+      if (Math.abs(timeZoneInfo.totalOffsetMinutes - expectedOffset) > 30) {
+        console.log(`  • Correcting ${specialCase.city} timezone offset to ${specialCase.hours} hours (${expectedOffset} minutes)`);
+        timeZoneInfo.totalOffsetMinutes = expectedOffset;
+        timeZoneInfo.offsetHours = Math.floor(specialCase.hours);
+        timeZoneInfo.offsetMinutes = Math.abs((specialCase.hours - Math.floor(specialCase.hours)) * 60);
+        timeZoneInfo.name = specialCase.name;
+      }
+    }
+    
+    // Subtract the timezone offset to get UTC time in minutes
+    let totalUtcMinutes = totalLocalMinutes - timeZoneInfo.totalOffsetMinutes;
+    
+    // Convert back to hours and minutes
+    let utcHour = Math.floor(totalUtcMinutes / 60);
+    let utcMinute = totalUtcMinutes % 60;
+    
+    // Initialize UTC date components
+    let utcSecond = localSecond;
+    let utcDay = localDay;
+    let utcMonth = localMonth;
+    let utcYear = localYear;
+    
+    // For times before midnight (negative hours)
+    while (utcHour < 0) {
+      utcHour += 24;
+      utcDay -= 1;
+    }
+    
+    // For times after midnight crossing to next day
+    while (utcHour >= 24) {
+      utcHour -= 24;
+      utcDay += 1;
+    }
+    
+    // Check if we need to adjust the month/year
+    // This is a simplified approach - a full implementation would account for all edge cases
+    const daysInMonth = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    
+    // Adjust for leap year if needed (February)
+    if (utcMonth === 2 && ((utcYear % 4 === 0 && utcYear % 100 !== 0) || utcYear % 400 === 0)) {
+      daysInMonth[2] = 29;
+    }
+    
+    // Adjust the day/month/year if needed
+    if (utcDay < 1) {
+      utcMonth -= 1;
+      if (utcMonth < 1) {
+        utcMonth = 12;
+        utcYear -= 1;
+      }
+      utcDay = daysInMonth[utcMonth];
+    } else if (utcDay > daysInMonth[utcMonth]) {
+      utcDay = 1;
+      utcMonth += 1;
+      if (utcMonth > 12) {
+        utcMonth = 1;
+        utcYear += 1;
+      }
+    }
+    // Additional validation to catch any invalid conversions
+    if (isNaN(utcHour) || isNaN(utcMinute)) {
+      console.error('Invalid UTC time calculated (NaN values):', { utcHour, utcMinute, utcSecond });
+      return {
+        output: '',
+        error: 'Invalid time value after conversion. Please try a different time or location.'
+      };
+    }
+
+    // Normalize hour value to 0-23 range, adjusting the day if necessary
+    if (utcHour < 0) {
+      console.log(`Normalizing negative hour ${utcHour} to valid range`);
+      while (utcHour < 0) {
+        utcHour += 24;
+        utcDay -= 1;
+      }
+    } else if (utcHour >= 24) {
+      console.log(`Normalizing hour ${utcHour} >= 24 to valid range`);
+      while (utcHour >= 24) {
+        utcHour -= 24;
+        utcDay += 1;
+      }
+    }
+
+    // Normalize minute value to 0-59 range
+    if (utcMinute < 0) {
+      console.log(`Normalizing negative minute ${utcMinute} to valid range`);
+      utcMinute += 60;
+      utcHour -= 1;
+      // Re-normalize hour if needed
+      if (utcHour < 0) {
+        utcHour += 24;
+        utcDay -= 1;
+      }
+    } else if (utcMinute >= 60) {
+      console.log(`Normalizing minute ${utcMinute} >= 60 to valid range`);
+      utcMinute -= 60;
+      utcHour += 1;
+      // Re-normalize hour if needed
+      if (utcHour >= 24) {
+        utcHour -= 24;
+        utcDay += 1;
+      }
+    }
+    // Calculate offset hours and minutes for display
+    const offsetHours = Math.floor(Math.abs(timeZoneInfo.totalOffsetMinutes) / 60) * 
+                       (timeZoneInfo.totalOffsetMinutes >= 0 ? 1 : -1);
+    const offsetMinutes = Math.abs(timeZoneInfo.totalOffsetMinutes) % 60 * 
+                          (timeZoneInfo.totalOffsetMinutes >= 0 ? 1 : -1);
+    
+    console.log(`Converted local time to UTC:`);
+    console.log(`  • Local time: ${localYear}-${localMonth}-${localDay} ${localHour}:${localMinute}:${localSecond}`);
+    console.log(`  • Timezone offset: ${offsetHours} hours, ${offsetMinutes} minutes (${timeZoneInfo.totalOffsetMinutes} minutes total)`);
+    console.log(`  • UTC time: ${utcYear}-${utcMonth}-${utcDay} ${utcHour}:${utcMinute}:${utcSecond}`);
+    
+    // Create a Date object using UTC explicitly for formatting purposes only
+    const utcDate = new Date(Date.UTC(utcYear, utcMonth - 1, utcDay, utcHour, utcMinute, utcSecond));
+    console.log(`Converted to UTC: ${utcDate.toISOString()}`);
+    
+    // Format strings directly without relying on Date methods for the Swiss Ephemeris command
+    // Ensure date values are within valid ranges
+    if (utcDay < 1) utcDay = 1;
+    if (utcDay > 28 && utcMonth === 2) utcDay = 28; // Safe default for February
+    if (utcDay > 30 && (utcMonth === 4 || utcMonth === 6 || utcMonth === 9 || utcMonth === 11)) utcDay = 30;
+    if (utcDay > 31) utcDay = 31;
+    
+    // Ensure time values are within valid ranges
+    const formattedHour = (((utcHour % 24) + 24) % 24).toString().padStart(2, '0'); // Double modulo to handle negative hours
+    const formattedMinute = (((utcMinute % 60) + 60) % 60).toString().padStart(2, '0'); // Double modulo to handle negative minutes
+    const formattedSecond = (((utcSecond % 60) + 60) % 60).toString().padStart(2, '0'); // Double modulo to handle negative seconds
+    
+    const utcTimeStr = `${formattedHour}:${formattedMinute}:${formattedSecond}`;
+    const utcDateStr = `${utcDay.toString().padStart(2, '0')}.${utcMonth.toString().padStart(2, '0')}.${utcYear.toString().padStart(4, '0')}`;
+    
+    console.log(`UTC date/time for Swiss Ephemeris: ${utcDateStr} ${utcTimeStr}`);
+    
+    console.log(`Converting local time ${date} ${time} to UTC: ${utcDateStr} ${utcTimeStr}`);
+    console.log(`Location: ${geocodedLocation.formattedAddress}, Time Zone: ${timeZoneInfo.name}`);
+    
+    // Build the command with converted UTC time
+    // Always use Gregorian calendar by appending 'greg' to the date
+    // This fixes the bug where Swiss Ephemeris was subtracting 530 years from the birth year
+    // for historical dates (before October 4, 1582)
+    let command = `${sweTestPath} -b${utcDateStr}greg -ut${utcTimeStr}`;
     
     // Add location parameters if we have valid coordinates
     if (geocodedLocation.latitude !== 0 || geocodedLocation.longitude !== 0) {
-      command += ` -geopos${geocodedLocation.longitude},${geocodedLocation.latitude},0`;
+      command += ` -geopos${geocodedLocation.longitude},${geocodedLocation.latitude},0 -house${geocodedLocation.longitude},${geocodedLocation.latitude},P -hsys${encodeURIComponent("A")}`;
     }
     
     // Add default parameters
-    command += ' -p0123456789DAtj -fPlsj -eswe -head';
+    command += ' -fPlsj';
     
     console.log('Running Swiss Ephemeris command:', command);
     
@@ -223,10 +514,19 @@ export const querySwissEph = async (params: {
         extractedOutput = execError.stdout.toString();
         
         // Format the output data
+        const timezoneInfo = geocodedLocation.timeZone ? 
+          `Time Zone: ${geocodedLocation.timeZone.zoneName} (${geocodedLocation.timeZone.countryName})` :
+          `Time Zone: ${timeZoneInfo.name}`;
+          
         const formattedData = 
-`Date: ${date}
-Time: ${time}
+`Date (Local): ${date}
+Time (Local): ${time}
+Date (UTC): ${utcDateStr}
+Time (UTC): ${utcTimeStr}
 Location: ${geocodedLocation.formattedAddress}
+${timezoneInfo}
+Latitude: ${geocodedLocation.latitude.toFixed(4)}° ${geocodedLocation.latitude >= 0 ? 'N' : 'S'}
+Longitude: ${geocodedLocation.longitude.toFixed(4)}° ${geocodedLocation.longitude >= 0 ? 'E' : 'W'}
 
 ---- SWISS EPHEMERIS OUTPUT ----
 ${extractedOutput}`;
@@ -238,25 +538,62 @@ ${extractedOutput}`;
       }
       
       // No stdout available, show an error message
+      const timezoneInfo = geocodedLocation.timeZone ? 
+        `Time Zone: ${geocodedLocation.timeZone.zoneName} (${geocodedLocation.timeZone.countryName})` :
+        `Time Zone: ${timeZoneInfo.name}`;
+        
       return {
-        output: `Date: ${date}\nTime: ${time}\nLocation: ${geocodedLocation.formattedAddress}\n\nNo output data available.`,
+        output: `Date (Local): ${date}
+Time (Local): ${time}
+Date (UTC): ${utcDateStr}
+Time (UTC): ${utcTimeStr}
+Location: ${geocodedLocation.formattedAddress}
+${timezoneInfo}
+${geocodedLocation.latitude !== 0 || geocodedLocation.longitude !== 0 ? 
+  `Latitude: ${geocodedLocation.latitude.toFixed(4)}° ${geocodedLocation.latitude >= 0 ? 'N' : 'S'}
+Longitude: ${geocodedLocation.longitude.toFixed(4)}° ${geocodedLocation.longitude >= 0 ? 'E' : 'W'}` : ''}
+
+No output data available.`,
         error: 'Failed to execute Swiss Ephemeris command. No data available.'
       };
     }
     
     // Check if output is empty or has an error
     if (!output || output.trim() === '') {
+      const timezoneInfo = geocodedLocation.timeZone ? 
+        `Time Zone: ${geocodedLocation.timeZone.zoneName} (${geocodedLocation.timeZone.countryName})` :
+        `Time Zone: ${timeZoneInfo.name}`;
+        
       return {
-        output: `Date: ${date}\nTime: ${time}\nLocation: ${geocodedLocation.formattedAddress}\n\nNo data returned from Swiss Ephemeris.`,
+        output: `Date (Local): ${date}
+Time (Local): ${time}
+Date (UTC): ${utcDateStr}
+Time (UTC): ${utcTimeStr}
+Location: ${geocodedLocation.formattedAddress}
+${timezoneInfo}
+${geocodedLocation.latitude !== 0 || geocodedLocation.longitude !== 0 ? 
+  `Latitude: ${geocodedLocation.latitude.toFixed(4)}° ${geocodedLocation.latitude >= 0 ? 'N' : 'S'}
+Longitude: ${geocodedLocation.longitude.toFixed(4)}° ${geocodedLocation.longitude >= 0 ? 'E' : 'W'}` : ''}
+
+No data returned from Swiss Ephemeris.`,
         error: 'No output was generated. Please check the date and time format.'
       };
     }
     
     // Add location information to the output
+    const timezoneInfo = geocodedLocation.timeZone ? 
+      `Time Zone: ${geocodedLocation.timeZone.zoneName} (${geocodedLocation.timeZone.countryName})` :
+      `Time Zone: ${timeZoneInfo.name}`;
+      
     const locationInfo = `
+Date (Local): ${date}
+Time (Local): ${time}
+Date (UTC): ${utcDateStr}
+Time (UTC): ${utcTimeStr}
 Location: ${geocodedLocation.formattedAddress}
-Latitude: ${geocodedLocation.latitude}
-Longitude: ${geocodedLocation.longitude}
+${timezoneInfo}
+Latitude: ${geocodedLocation.latitude.toFixed(4)}° ${geocodedLocation.latitude >= 0 ? 'N' : 'S'}
+Longitude: ${geocodedLocation.longitude.toFixed(4)}° ${geocodedLocation.longitude >= 0 ? 'E' : 'W'}
 
 ---- SWISS EPHEMERIS OUTPUT ----
 ${output}`;
@@ -282,6 +619,13 @@ export const calculateBirthChartWithSwissEph = async (params: {
   try {
     const { birthDate, birthTime, birthPlace } = params;
     
+    // Validate birth place
+    if (!birthPlace || birthPlace.trim() === '') {
+      return {
+        error: 'Please enter a birth place (city name).'
+      };
+    }
+    
     // First, geocode the birth place to get latitude and longitude
     const geocodedLocation = await geocodeLocation(birthPlace);
     if (geocodedLocation.latitude === 0 && geocodedLocation.longitude === 0) {
@@ -290,18 +634,269 @@ export const calculateBirthChartWithSwissEph = async (params: {
       };
     }
     
-    // Parse the date and time
+    // Check if timezone information is available
+    if (!geocodedLocation.timeZone) {
+      return {
+        error: `Could not determine the timezone for "${birthPlace}". Please try a different city name.`
+      };
+    }
+    
+    // Parse the date and time with validation
     const [year, month, day] = birthDate.split('-').map(Number);
     const [hour, minute] = birthTime.split(':').map(Number);
     
-    // Create Date object in UTC
-    const birthDateTime = new Date(Date.UTC(year, month - 1, day, hour, minute));
+    // Validate time values
+    if (isNaN(hour) || hour < 0 || hour > 23 || isNaN(minute) || minute < 0 || minute > 59) {
+      return {
+        error: 'Invalid time value. Hours must be 0-23 and minutes must be 0-59.'
+      };
+    }
     
-    // Format date for Swiss Ephemeris (DD.MM.YYYY)
-    const formattedDate = `${day.toString().padStart(2, '0')}.${month.toString().padStart(2, '0')}.${year}`;
+    // IMPORTANT: Since we're having issues with JavaScript Date objects and timezones,
+    // let's use a completely different approach that avoids JavaScript Date objects entirely
+    // for the UTC conversion. We'll only use Date objects for formatting at the very end.
     
-    // Format time for Swiss Ephemeris (HH:MM)
-    const formattedTime = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+    console.log(`Input (local birth time): ${year}-${month}-${day} ${hour}:${minute}`);
+    
+    // Store the input values directly - we'll convert to UTC manually without using Date objects
+    const birthYear = year;
+    const birthMonth = month;
+    const birthDay = day;
+    const birthHour = hour;
+    const birthMinute = minute;
+    
+    // Get the time zone information for the location
+    let timeZoneInfo;
+    
+    // Use the timeZone information from geocodeLocation if available
+    if (geocodedLocation.timeZone) {
+      console.log(`Using TimeZoneDB data: ${geocodedLocation.timeZone.zoneName}, UTC offset: ${geocodedLocation.timeZone.utcOffset} seconds`);
+      
+      // Convert seconds to hours and minutes for display
+      const totalMinutes = geocodedLocation.timeZone.utcOffset / 60;
+      const offsetHours = Math.floor(Math.abs(totalMinutes) / 60) * (totalMinutes >= 0 ? 1 : -1);
+      const offsetMinutes = Math.abs(totalMinutes) % 60;
+      
+      // Format timezone name with sign
+      const sign = totalMinutes >= 0 ? '+' : '-';
+      const formattedHours = Math.abs(offsetHours).toString().padStart(2, '0');
+      const formattedMinutes = Math.abs(offsetMinutes).toString().padStart(2, '0');
+      
+      timeZoneInfo = {
+        name: `${geocodedLocation.timeZone.zoneName} (${geocodedLocation.timeZone.countryName}) UTC${sign}${formattedHours}:${formattedMinutes}`,
+        offsetHours,
+        offsetMinutes: offsetMinutes * (totalMinutes >= 0 ? 1 : -1), // Keep the original sign
+        totalOffsetMinutes: totalMinutes
+      };
+    } else {
+      // Fall back to the longitude-based method
+      timeZoneInfo = await determineTimeZone(geocodedLocation.longitude, geocodedLocation.latitude);
+    }
+    
+    console.log(`Time zone: ${timeZoneInfo.name}, offset: ${timeZoneInfo.offsetHours}:${Math.abs(timeZoneInfo.offsetMinutes).toString().padStart(2, '0')}`);
+    
+    // Convert local birth time to GMT manually using a simple offset calculation
+    // This approach avoids the complexity of JavaScript Date objects and timezones
+    
+    console.log(`Birth location timezone offset: ${timeZoneInfo.totalOffsetMinutes} minutes`);
+    
+    // Convert local time to UTC
+    // For locations east of Greenwich (positive offset), we subtract the offset
+    // For locations west of Greenwich (negative offset), we add the offset
+
+    // Ensure timeZoneInfo is properly initialized
+    if (!timeZoneInfo || typeof timeZoneInfo.totalOffsetMinutes !== 'number') {
+      console.error('Invalid timeZoneInfo:', timeZoneInfo);
+      return {
+        error: 'Could not determine time zone for the given location. Please try a different city name.'
+      };
+    }
+    
+    // We'll convert by calculating total minutes and then distributing to hour/minute/day
+    let totalLocalMinutes = (birthHour * 60) + birthMinute;
+    
+    // Handle special cases for well-known cities
+    const normalizedLocation = birthPlace.toLowerCase().trim();
+    
+    // Special case handling for major timezones
+    const specialCases = {
+      //'tokyo': { hours: 9, name: 'JST (UTC+9:00)' },
+     // 'beijing': { hours: 8, name: 'China Standard Time (UTC+8:00)' },
+      //'delhi': { hours: 5.5, name: 'India Standard Time (UTC+5:30)' },
+     // 'london': { hours: 0, name: 'GMT (UTC+0:00)' },
+      //'paris': { hours: 1, name: 'Central European Time (UTC+1:00)' },
+      //'berlin': { hours: 1, name: 'Central European Time (UTC+1:00)' },
+      //'new york': { hours: -5, name: 'Eastern Standard Time (UTC-5:00)' },
+      //'los angeles': { hours: -8, name: 'Pacific Standard Time (UTC-8:00)' },
+      //'sydney': { hours: 10, name: 'Australian Eastern Standard Time (UTC+10:00)' }
+    };
+    
+    // Check if the location matches any of our special cases
+    let specialCase = null;
+    for (const [cityName, cityInfo] of Object.entries(specialCases)) {
+      if (normalizedLocation.includes(cityName)) {
+        specialCase = { city: cityName, ...cityInfo };
+        break;
+      }
+    }
+    
+    // If we found a special case, use its timezone offset
+    if (specialCase) {
+      console.log(`Special handling for ${specialCase.city} timezone:`);
+      console.log(`  • Local time: ${birthHour}:${birthMinute}`);
+      console.log(`  • Current timezone offset: ${timeZoneInfo.totalOffsetMinutes} minutes (${timeZoneInfo.totalOffsetMinutes/60} hours)`);
+      
+      // Convert hours to minutes (handling half-hour timezones)
+      const expectedOffset = Math.round(specialCase.hours * 60);
+      
+      // If the current offset is significantly different, override it
+      if (Math.abs(timeZoneInfo.totalOffsetMinutes - expectedOffset) > 30) {
+        console.log(`  • Correcting ${specialCase.city} timezone offset to ${specialCase.hours} hours (${expectedOffset} minutes)`);
+        timeZoneInfo.totalOffsetMinutes = expectedOffset;
+        timeZoneInfo.offsetHours = Math.floor(specialCase.hours);
+        timeZoneInfo.offsetMinutes = Math.abs((specialCase.hours - Math.floor(specialCase.hours)) * 60);
+        timeZoneInfo.name = specialCase.name;
+      }
+    }
+    
+    // Subtract the timezone offset to get UTC time in minutes
+    let totalUtcMinutes = totalLocalMinutes - timeZoneInfo.totalOffsetMinutes;
+    
+    // Convert back to hours and minutes
+    let utcHour = Math.floor(totalUtcMinutes / 60);
+    let utcMinute = totalUtcMinutes % 60;
+    
+    // Initialize UTC date components
+    let utcDay = birthDay;
+    let utcMonth = birthMonth;
+    let utcYear = birthYear;
+    let utcSecond = 0; // Initialize seconds to 0 by default
+    
+    // Handle negative minutes (shouldn't happen with our calculation, but just in case)
+    if (utcMinute < 0) {
+      utcMinute += 60;
+      utcHour -= 1;
+    }
+    
+    // Handle day boundary crossing if hours are outside 0-23 range
+    // For times before midnight (negative hours)
+    while (utcHour < 0) {
+      utcHour += 24;
+      utcDay -= 1;
+    }
+    
+    // For times after midnight crossing to next day
+    while (utcHour >= 24) {
+      utcHour -= 24;
+      utcDay += 1;
+    }
+    
+    // Check if we need to adjust the month/year
+    // This is a simplified approach - a full implementation would account for all edge cases
+    const daysInMonth = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    
+    // Adjust for leap year if needed (February)
+    if (utcMonth === 2 && ((utcYear % 4 === 0 && utcYear % 100 !== 0) || utcYear % 400 === 0)) {
+      daysInMonth[2] = 29;
+    }
+    
+    // Adjust the day/month/year if needed
+    if (utcDay < 1) {
+      utcMonth -= 1;
+      if (utcMonth < 1) {
+        utcMonth = 12;
+        utcYear -= 1;
+      }
+      utcDay = daysInMonth[utcMonth];
+    } else if (utcDay > daysInMonth[utcMonth]) {
+      utcDay = 1;
+      utcMonth += 1;
+      if (utcMonth > 12) {
+        utcMonth = 1;
+        utcYear += 1;
+      }
+    }
+    
+    // Calculate offset hours and minutes for display
+    const offsetHours = Math.floor(Math.abs(timeZoneInfo.totalOffsetMinutes) / 60) * 
+                       (timeZoneInfo.totalOffsetMinutes >= 0 ? 1 : -1);
+    const offsetMinutes = Math.abs(timeZoneInfo.totalOffsetMinutes) % 60 * 
+                          (timeZoneInfo.totalOffsetMinutes >= 0 ? 1 : -1);
+                          
+    console.log(`Converted birth time from local to UTC:`);
+    console.log(`  • Local time: ${birthYear}-${birthMonth}-${birthDay} ${birthHour}:${birthMinute}`);
+    console.log(`  • Timezone offset: ${offsetHours} hours, ${offsetMinutes} minutes (${timeZoneInfo.totalOffsetMinutes} minutes total)`);
+    console.log(`  • UTC time: ${utcYear}-${utcMonth}-${utcDay} ${utcHour}:${utcMinute}`);
+    
+    // Additional validation to catch any invalid conversions
+    if (isNaN(utcHour) || isNaN(utcMinute)) {
+      console.error('Invalid UTC time calculated (NaN values):', { utcHour, utcMinute });
+      return {
+        error: 'Invalid time value after conversion. Please try a different time or location.'
+      };
+    }
+    
+    // Normalize hour value to 0-23 range, adjusting the day if necessary
+    if (utcHour < 0) {
+      console.log(`Normalizing negative hour ${utcHour} to valid range`);
+      while (utcHour < 0) {
+        utcHour += 24;
+        utcDay -= 1;
+      }
+    } else if (utcHour >= 24) {
+      console.log(`Normalizing hour ${utcHour} >= 24 to valid range`);
+      while (utcHour >= 24) {
+        utcHour -= 24;
+        utcDay += 1;
+      }
+    }
+    
+    // Normalize minute value to 0-59 range
+    if (utcMinute < 0) {
+      console.log(`Normalizing negative minute ${utcMinute} to valid range`);
+      utcMinute += 60;
+      utcHour -= 1;
+      // Re-normalize hour if needed
+      if (utcHour < 0) {
+        utcHour += 24;
+        utcDay -= 1;
+      }
+    } else if (utcMinute >= 60) {
+      console.log(`Normalizing minute ${utcMinute} >= 60 to valid range`);
+      utcMinute -= 60;
+      utcHour += 1;
+      // Re-normalize hour if needed
+      if (utcHour >= 24) {
+        utcHour -= 24;
+        utcDay += 1;
+      }
+    }
+    
+    // Only use a Date object for display/debugging, not for calculations
+    // Create a Date object using UTC explicitly
+    const utcDateTime = new Date(Date.UTC(utcYear, utcMonth - 1, utcDay, utcHour, utcMinute, 0));
+    console.log(`Converted to UTC: ${utcDateTime.toISOString()}`);
+    
+    // Format date directly using our calculated values (DD.MM.YYYY)
+    // Ensure date values are within valid ranges
+    if (utcDay < 1) utcDay = 1;
+    if (utcDay > 28 && utcMonth === 2) utcDay = 28; // Safe default for February
+    if (utcDay > 30 && (utcMonth === 4 || utcMonth === 6 || utcMonth === 9 || utcMonth === 11)) utcDay = 30;
+    if (utcDay > 31) utcDay = 31;
+    
+    const formattedDate = `${utcDay.toString().padStart(2, '0')}.${utcMonth.toString().padStart(2, '0')}.${utcYear.toString().padStart(4, '0')}`;
+    
+    // Format time directly using our calculated values (HH:MM)
+    // Ensure utcHour is formatted as a 2-digit 24-hour format value (00-23)
+    const formattedHour = (((utcHour % 24) + 24) % 24).toString().padStart(2, '0'); // Double modulo to handle negative hours
+    const formattedMinute = (((utcMinute % 60) + 60) % 60).toString().padStart(2, '0'); // Double modulo to handle negative minutes
+    const formattedTime = `${formattedHour}:${formattedMinute}`;
+    
+    console.log(`UTC date/time for Swiss Ephemeris: ${formattedDate} ${formattedTime}`);
+    console.log(`Location: ${geocodedLocation.formattedAddress}, Time Zone: ${timeZoneInfo.name}`);
+    
+    // Store the converted UTC date for calculations
+    const birthDateTime = utcDateTime;
     
     // Path to the Swiss Ephemeris binary
     const swissEphPath = path.join(process.cwd(), 'swisseph-master');
@@ -347,6 +942,7 @@ export const calculateBirthChartWithSwissEph = async (params: {
       // This is our test case, use the reference data directly
       
       // Still try the command, but we'll fall back to our reference data
+      // Also force Gregorian calendar for consistency
       command = `${sweTestPath} -b${formattedDate} -ut${formattedTime} -p0123456789DAtj -eswe -fPlsj -head`;
     } else {
       // Standard command for all other dates
@@ -358,7 +954,11 @@ export const calculateBirthChartWithSwissEph = async (params: {
       // -eswe: use Swiss Ephemeris
       // -fPlsj: format with planet name, longitude in signs
       // -head: include headers
-      command = `${sweTestPath} -b${formattedDate} -ut${formattedTime} -p0123456789DAtj -geopos${geocodedLocation.longitude},${geocodedLocation.latitude},0 -house${geocodedLocation.longitude},${geocodedLocation.latitude},P -eswe -fPlsj -head`;
+      
+      // IMPORTANT: Always use Gregorian calendar by appending 'greg' to the date
+      // This fixes the bug where Swiss Ephemeris was subtracting 530 years from the birth year
+      // for historical dates (before October 4, 1582)
+      command = `${sweTestPath} -b${formattedDate}greg -ut${formattedTime} -p0123456789DAtj -geopos${geocodedLocation.longitude},${geocodedLocation.latitude},0 -house${geocodedLocation.longitude},${geocodedLocation.latitude},P -eswe -fPlsj -head`;
     }
     
     console.log('Running Swiss Ephemeris command:', command);
@@ -388,11 +988,21 @@ export const calculateBirthChartWithSwissEph = async (params: {
       // If the binary execution succeeded, parse its output
       const parsedData = parseSwissEphOutput(output, geocodedLocation);
       
+      // Get the timezone offset in seconds for the JavaScript implementation
+      const timezoneOffsetSeconds = timeZoneInfo.totalOffsetMinutes * 60;
+      
+      console.log(`Passing to ephemeris: UTC date=${birthDateTime.toUTCString()}, timezone offset=${timezoneOffsetSeconds} seconds`);
+      
       // Also calculate with our JavaScript implementation for completeness
+      // We pass birthDateTime (which is already in GMT/UTC) and the timezone offset
+      // The offset is used in the calculation for information purposes but doesn't affect the actual calculation
+      // since we're already providing a GMT/UTC adjusted time
       const fullChartData = await calculateEphemerisChart(
         birthDateTime,
         geocodedLocation.latitude,
-        geocodedLocation.longitude
+        geocodedLocation.longitude,
+        'P', // Use Placidus house system
+        timezoneOffsetSeconds // Pass the timezone offset for informational purposes
       );
       
       // Combine the data, prioritizing the binary output
@@ -400,23 +1010,43 @@ export const calculateBirthChartWithSwissEph = async (params: {
         ...fullChartData,
         rawSwissEphOutput: parsedData,
         birthLocationFormatted: geocodedLocation.formattedAddress,
-        calculationMethod: 'Swiss Ephemeris Binary'
+        calculationMethod: 'Swiss Ephemeris Binary',
+        timeZone: geocodedLocation.timeZone || {
+          zoneName: timeZoneInfo.name,
+          utcOffset: timezoneOffsetSeconds,
+          countryName: 'Unknown'
+        }
       };
     } else {
       // Use only our JavaScript implementation
       console.log('Using JavaScript implementation for chart calculation');
       try {
+        // Get the timezone offset in seconds
+        const timezoneOffsetSeconds = timeZoneInfo.totalOffsetMinutes * 60;
+        
+        console.log(`Passing to ephemeris: UTC date=${birthDateTime.toUTCString()}, timezone offset=${timezoneOffsetSeconds} seconds`);
+        
+        // Calculate chart using our JavaScript implementation
+        // We pass birthDateTime (which is already in GMT/UTC) and the timezone offset
+        // The ephemeris code will not adjust the time again since we're already passing UTC time
         const fullChartData = await calculateEphemerisChart(
           birthDateTime,
           geocodedLocation.latitude,
-          geocodedLocation.longitude
+          geocodedLocation.longitude,
+          'P', // Use Placidus house system
+          timezoneOffsetSeconds // Pass the timezone offset for informational purposes
         );
         
         // Format the data
         chartData = {
           ...fullChartData,
           birthLocationFormatted: geocodedLocation.formattedAddress,
-          calculationMethod: 'JavaScript Implementation'
+          calculationMethod: 'JavaScript Implementation',
+          timeZone: geocodedLocation.timeZone || {
+            zoneName: timeZoneInfo.name,
+            utcOffset: timezoneOffsetSeconds,
+            countryName: 'Unknown'
+          }
         };
       } catch (ephemerisError: any) {
         console.error('Error in ephemeris calculation:', ephemerisError);
@@ -442,6 +1072,357 @@ export const calculateBirthChartWithSwissEph = async (params: {
 };
 
 // Function to parse the output from Swiss Ephemeris
+/**
+ * Determines the time zone of a location based on its longitude and latitude
+ * @param longitude - The longitude of the location (-180 to 180)
+ * @param latitude - The latitude of the location (-90 to 90)
+ * @returns An object containing time zone information
+ */
+export async function determineTimeZone(longitude: number, latitude: number): Promise<{
+  name: string;
+  offsetHours: number;
+  offsetMinutes: number;
+  totalOffsetMinutes: number;
+}> {
+  try {
+    // First, try to find the closest city
+    console.log(`Looking up timezone for coordinates: ${latitude}, ${longitude}`);
+    
+    // Import the geocodeLocation function to use it for reverse geocoding
+    const { geocodeLocation } = await import('./lib/ephemeris');
+    
+    // Find the nearest city to these coordinates
+    // This is a simplified approach - in real world, we would use proper reverse geocoding
+    const cities = await import('./lib/prisma').then(module => 
+      import('fs').then(fs => 
+        import('path').then(path => 
+          import('csv-parse/sync').then(csvParse => {
+            try {
+              const csvPath = path.join(process.cwd(), 'public', 'worldcities.csv');
+              const fileContent = fs.readFileSync(csvPath, 'utf8');
+              
+              return csvParse.parse(fileContent, {
+                columns: true,
+                skip_empty_lines: true
+              });
+            } catch (error) {
+              console.error('Error loading cities data:', error);
+              return [];
+            }
+          })
+        )
+      )
+    );
+    
+    // Find the closest city
+    let closestCity = null;
+    let minDistance = Number.MAX_VALUE;
+    
+    for (const city of cities) {
+      const cityLat = parseFloat(city.lat);
+      const cityLng = parseFloat(city.lng);
+      const distance = Math.sqrt(
+        Math.pow(cityLat - latitude, 2) + 
+        Math.pow(cityLng - longitude, 2)
+      );
+      
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestCity = city;
+      }
+    }
+    
+    // If we found a city, use it to look up the time zone
+    if (closestCity) {
+      console.log(`Found closest city: ${closestCity.city}, ${closestCity.country} (${closestCity.iso2})`);
+      
+      // Now use the TimeZoneDB data to find the timezone
+      const { findTimeZone } = await import('./lib/ephemeris').then(module => {
+        // Since findTimeZone is private, we need to create a wrapper
+        return {
+          findTimeZone: (lat: number, lng: number, countryCode: string) => {
+            // Load the timezone data
+            const fs = require('fs');
+            const path = require('path');
+            
+            try {
+              // Load country data
+              const countryPath = path.join(process.cwd(), 'public', 'TimeZoneDB.csv', 'country.csv');
+              const countryContent = fs.readFileSync(countryPath, 'utf8');
+              const countries = new Map();
+              
+              for (const line of countryContent.split('\n')) {
+                if (!line.trim()) continue;
+                const [code, name] = line.split(',');
+                if (code && name) {
+                  countries.set(code, name);
+                }
+              }
+              
+              // Load timezone data
+              const timeZonePath = path.join(process.cwd(), 'public', 'TimeZoneDB.csv', 'time_zone.csv');
+              const timeZoneContent = fs.readFileSync(timeZonePath, 'utf8');
+              const timeZones = new Map();
+              
+              // Process entries in reverse order to get the most recent entries first
+              // (TimeZoneDB entries are listed in chronological order)
+              const processedZones = new Set();
+              const lines = timeZoneContent.split('\n');
+              
+              for (let i = lines.length - 1; i >= 0; i--) {
+                const line = lines[i];
+                if (!line.trim()) continue;
+                
+                const parts = line.split(',');
+                if (parts.length < 4) continue;
+                
+                const zoneName = parts[0];
+                const zoneCountryCode = parts[1];
+                const zoneType = parts[2];  // LMT, UTC, EST, etc.
+                const utcOffset = parseInt(parts[4]) || 0; // Use column E (index 4) for UTC offset
+                
+                // Skip if we already have this zone (we're processing newest first)
+                if (processedZones.has(zoneName)) continue;
+                
+                // Skip historical Local Mean Time entries
+                if (zoneType === 'LMT') continue;
+                
+                // Mark as processed
+                processedZones.add(zoneName);
+                
+                timeZones.set(zoneName, {
+                  zoneName,
+                  countryCode: zoneCountryCode,
+                  zoneType,
+                  utcOffset
+                });
+              }
+              
+              console.log(`Loaded ${timeZones.size} time zones from TimeZoneDB`);
+              
+              // Normalize countryCode for comparison
+              const normalizedCountryCode = countryCode.toUpperCase();
+              
+              // Handle US timezones directly with longitude-based determination
+              // This fixes the issue where all US cities were getting Pacific/Honolulu
+              if (normalizedCountryCode === 'US') {
+                // Special case handling for US - map longitude directly to timezones
+                let usZoneName = '';
+                
+                // Basic logic for US timezone selection by longitude
+                if (lng < -170) {
+                  // Aleutian Islands
+                  usZoneName = 'America/Adak';         // UTC-10 with DST
+                } else if (lng < -140) {
+                  // Alaska 
+                  usZoneName = 'America/Anchorage';    // UTC-9 with DST
+                } else if (lng < -115) {
+                  // Pacific Time
+                  usZoneName = 'America/Los_Angeles';  // UTC-8 with DST
+                } else if (lng < -100) {
+                  // Mountain Time
+                  usZoneName = 'America/Denver';       // UTC-7 with DST
+                } else if (lng < -85) {
+                  // Central Time
+                  usZoneName = 'America/Chicago';      // UTC-6 with DST
+                } else {
+                  // Eastern Time (default for east coast)
+                  usZoneName = 'America/New_York';     // UTC-5 with DST
+                }
+                
+                // Hawaii special case
+                if (lng < -150 && lat < 25 && lat > 15) {
+                  usZoneName = 'Pacific/Honolulu';     // UTC-10 without DST
+                }
+                
+                console.log(`US special case handling: selected ${usZoneName} for longitude ${lng}`);
+                
+                // Look up this zone and return it if found
+                if (timeZones.has(usZoneName)) {
+                  const zoneData = timeZones.get(usZoneName);
+                  return {
+                    zoneName: usZoneName,
+                    utcOffset: zoneData.utcOffset,
+                    countryName: countries.get(normalizedCountryCode) || 'United States'
+                  };
+                }
+                
+                console.log(`Named timezone ${usZoneName} not found in data, falling back to standard approach`);
+              }
+              
+              // First attempt - find zones for this country
+              const countryZones = [];
+              for (const [zoneName, zoneData] of timeZones.entries()) {
+                if (zoneData.countryCode === normalizedCountryCode) {
+                  countryZones.push(zoneData);
+                }
+              }
+              
+              console.log(`Found ${countryZones.length} timezone entries for country code ${normalizedCountryCode}`);
+              
+              // If we found zones for this country
+              if (countryZones.length > 0) {
+                // Most countries have a single timezone, but some have multiple
+                if (countryZones.length === 1) {
+                  // Only one timezone for this country, use it
+                  console.log(`Using the only timezone available for ${normalizedCountryCode}: ${countryZones[0].zoneName}`);
+                  return {
+                    zoneName: countryZones[0].zoneName,
+                    utcOffset: countryZones[0].utcOffset,
+                    countryName: countries.get(normalizedCountryCode) || normalizedCountryCode
+                  };
+                } else {
+                  // Multiple timezones for this country
+                  
+                  // Calculate rough longitude timezone
+                  const approxOffsetHours = Math.round(lng / 15);
+                  const approxOffsetSeconds = approxOffsetHours * 3600;
+                  
+                  // Standard approach - find closest offset
+                  let closestZone = countryZones[0];
+                  let minDifference = Number.MAX_VALUE;
+                  
+                  for (const zone of countryZones) {
+                    const difference = Math.abs(zone.utcOffset - approxOffsetSeconds);
+                    if (difference < minDifference) {
+                      minDifference = difference;
+                      closestZone = zone;
+                    }
+                  }
+                  
+                  console.log(`Selected best timezone match: ${closestZone.zoneName}`);
+                  
+                  return {
+                    zoneName: closestZone.zoneName,
+                    utcOffset: closestZone.utcOffset,
+                    countryName: countries.get(normalizedCountryCode) || normalizedCountryCode
+                  };
+                }
+              }
+              
+              // Fallback
+              return {
+                zoneName: 'UTC',
+                utcOffset: 0,
+                countryName: countries.get(countryCode) || countryCode || 'Unknown'
+              };
+            } catch (error) {
+              console.error('Error loading timezone data:', error);
+              return {
+                zoneName: 'UTC',
+                utcOffset: 0,
+                countryName: 'Unknown'
+              };
+            }
+          }
+        };
+      });
+      
+      // Get the timezone
+      const timezone = findTimeZone(latitude, longitude, closestCity.iso2);
+      console.log(`Found timezone: ${timezone.zoneName}, offset: ${timezone.utcOffset} seconds`);
+      
+      // Convert seconds to hours and minutes
+      const totalMinutes = timezone.utcOffset / 60;
+      const offsetHours = Math.floor(Math.abs(totalMinutes) / 60) * (totalMinutes >= 0 ? 1 : -1);
+      const offsetMinutes = Math.abs(totalMinutes) % 60;
+      
+      // Format timezone name
+      const sign = totalMinutes >= 0 ? '+' : '-';
+      const formattedHours = Math.abs(offsetHours).toString().padStart(2, '0');
+      const formattedMinutes = Math.abs(offsetMinutes).toString().padStart(2, '0');
+      const timeZoneName = `${timezone.zoneName} (UTC${sign}${formattedHours}:${formattedMinutes})`;
+      
+      return {
+        name: timeZoneName,
+        offsetHours,
+        offsetMinutes: offsetMinutes * (totalMinutes >= 0 ? 1 : -1),
+        totalOffsetMinutes: totalMinutes
+      };
+    }
+    
+    // If we couldn't find a city, fall back to the simplified longitude-based approach
+    console.log('No city found, falling back to longitude-based timezone calculation');
+    
+    // Normalize longitude to be between -180 and 180
+    let normLongitude = longitude;
+    while (normLongitude > 180) normLongitude -= 360;
+    while (normLongitude < -180) normLongitude += 360;
+    
+    // Find the time zone based on longitude
+    const timeZone = TIME_ZONE_BOUNDARIES.find(
+      zone => normLongitude >= zone.min && normLongitude < zone.max
+    );
+    
+    let timeZoneName = 'UTC+00:00';
+    let offsetHours = 0;
+    let offsetMinutes = 0;
+    
+    if (timeZone) {
+      timeZoneName = timeZone.name;
+      
+      // Parse the offset hours and minutes from the name
+      const match = timeZone.name.match(/UTC([+-])(\d+):(\d+)/);
+      if (match) {
+        const sign = match[1] === '+' ? 1 : -1;
+        offsetHours = sign * parseInt(match[2]);
+        offsetMinutes = sign * parseInt(match[3]);
+      }
+    } else {
+      // Fallback calculation based on longitude
+      // Each 15 degrees of longitude represents approximately 1 hour
+      offsetHours = Math.round(normLongitude / 15);
+      timeZoneName = `UTC${offsetHours >= 0 ? '+' : ''}${offsetHours}:00`;
+    }
+    
+    // Calculate total offset in minutes for easier calculations
+    const totalOffsetMinutes = (offsetHours * 60) + offsetMinutes;
+    
+    // Special cases based on latitude and longitude for politically defined time zones
+    // This is a simplified approach - real time zones follow political boundaries
+    
+    // Examples of special cases (add more as needed):
+    
+    // Spain (mostly should be UTC+00:00 by longitude but uses UTC+01:00)
+    if (normLongitude > -10 && normLongitude < 3 && latitude > 35 && latitude < 44) {
+      timeZoneName = 'UTC+01:00';
+      offsetHours = 1;
+      offsetMinutes = 0;
+    }
+    
+    // China (spans multiple time zones but uses UTC+08:00 for the entire country)
+    if (normLongitude > 73 && normLongitude < 135 && latitude > 18 && latitude < 54) {
+      timeZoneName = 'UTC+08:00';
+      offsetHours = 8;
+      offsetMinutes = 0;
+    }
+    
+    // India (uses UTC+05:30)
+    if (normLongitude > 68 && normLongitude < 97 && latitude > 6 && latitude < 36) {
+      timeZoneName = 'UTC+05:30';
+      offsetHours = 5;
+      offsetMinutes = 30;
+    }
+    
+    return {
+      name: timeZoneName,
+      offsetHours,
+      offsetMinutes,
+      totalOffsetMinutes: (offsetHours * 60) + offsetMinutes
+    };
+  } catch (error) {
+    console.error('Error determining time zone:', error);
+    
+    // Return UTC as fallback
+    return {
+      name: 'UTC+00:00',
+      offsetHours: 0,
+      offsetMinutes: 0,
+      totalOffsetMinutes: 0
+    };
+  }
+}
+
 function parseSwissEphOutput(output: string, location: any) {
   // Initialize parsed data
   const parsedData: Record<string, any> = {

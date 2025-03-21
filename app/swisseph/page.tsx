@@ -11,6 +11,7 @@ import { querySwissEph } from '@/actions'
 export default function SwissEphPage() {
   const [date, setDate] = useState('')
   const [time, setTime] = useState('')
+  const [location, setLocation] = useState('')
   const [result, setResult] = useState<{ output: string; error?: string } | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -22,7 +23,8 @@ export default function SwissEphPage() {
     try {
       const response = await querySwissEph({
         date,
-        time
+        time,
+        location
       })
       setResult(response)
     } catch (error) {
@@ -61,9 +63,20 @@ export default function SwissEphPage() {
                   onChange={(e) => setTime(e.target.value)}
                   required
                 />
-                <p className="text-xs text-gray-500 mt-1">Format: 19:56 (24-hour format)</p>
+                <p className="text-xs text-gray-500 mt-1">Format: 19:56 (24-hour format, local time for the location)</p>
               </div>
               
+              <div>
+                <Label htmlFor="location">Birth Location</Label>
+                <Input 
+                  id="location" 
+                  placeholder="New York, NY, USA"
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1">Enter city name, optionally with state/country (e.g., "New York, NY" or "Paris, France")</p>
+              </div>
               
               <Button 
                 type="submit" 
