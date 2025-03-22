@@ -29,8 +29,22 @@ const ZODIAC_SIGNS = [
   'Sagittarius', 'Capricorn', 'Aquarius', 'Pisces'
 ];
 
-// Helper function to convert degrees to radians
-const degToRad = (deg: number) => (deg * Math.PI) / 180;
+// South Indian chart order - defining the position of signs in the chart grid
+// Starting from lower right and moving counterclockwise
+const SOUTH_INDIAN_CHART_ORDER = [
+  11, // Pisces - lower right
+  0,  // Aries - going up
+  1,  // Taurus
+  2,  // Gemini - upper right
+  3,  // Cancer - going left
+  4,  // Leo
+  5,  // Virgo - upper left
+  6,  // Libra - going down
+  7,  // Scorpio
+  8,  // Sagittarius - lower left
+  9,  // Capricorn - going right
+  10  // Aquarius
+];
 
 export type Planet = {
   name: string; 
@@ -61,6 +75,9 @@ export type ChartData = {
   houses: Record<string, House>;
   ascendant: Planet;
   aspects?: Aspect[];
+  date?: string;
+  time?: string;
+  location?: string;
 };
 
 type ZodiacWheelProps = {
@@ -73,14 +90,52 @@ export function ZodiacWheel({ chartData, width = 600, height = 600 }: ZodiacWhee
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [tooltipInfo, setTooltipInfo] = useState<{ x: number; y: number; text: string } | null>(null);
   
-  const centerX = width / 2;
-  const centerY = height / 2;
+  // Calculate center and dimensions for the South Indian square chart
+  const chartSize = Math.min(width, height) * 0.9; // Square chart size
+  const cellSize = chartSize / 4; // Size of each cell in the grid
+  const chartX = (width - chartSize) / 2; // Top-left X of the chart
+  const chartY = (height - chartSize) / 2; // Top-left Y of the chart
+  const centerX = width / 2; // Center X
+  const centerY = height / 2; // Center Y
   
-  // Radius settings
-  const outerRadius = Math.min(width, height) * 0.45;
-  const zodiacWidth = outerRadius * 0.15;
-  const houseRadius = outerRadius - zodiacWidth;
-  const planetRadius = houseRadius * 0.7;
+  // Define colors for elements
+  const elementColors: Record<string, string> = {
+    fire: 'rgba(255, 50, 0, 0.2)',    // Bright red for Fire (Aries, Leo, Sagittarius)
+    earth: 'rgba(0, 180, 0, 0.2)',    // Rich green for Earth (Taurus, Virgo, Capricorn)
+    air: 'rgba(255, 255, 0, 0.2)',    // Yellow for Air (Gemini, Libra, Aquarius)
+    water: 'rgba(0, 100, 255, 0.2)'   // Blue for Water (Cancer, Scorpio, Pisces)
+  };
+  
+  // Bright colors for planets
+  const planetColors: Record<string, string> = {
+    sun: '#ff0',          // Bright yellow
+    moon: '#fff',         // White
+    mercury: '#0ff',      // Cyan
+    venus: '#f0f',        // Magenta
+    mars: '#f00',         // Pure red
+    jupiter: '#f80',      // Orange
+    saturn: '#fb0',       // Gold
+    uranus: '#0f8',       // Bright teal
+    neptune: '#08f',      // Bright blue
+    pluto: '#80f',        // Purple
+    ascendant: '#ff0',    // Bright yellow
+    meanNode: '#0f0',     // Bright green
+    trueNode: '#0f0',     // Bright green
+    meanLilith: '#f0f',   // Magenta
+    chiron: '#0ff'        // Cyan
+  };
+  
+  // Create a new Image element for the background chart
+  const [chartImage, setChartImage] = useState<HTMLImageElement | null>(null);
+  
+  // Load the background image on component mount
+  useEffect(() => {
+    const img = new Image();
+    img.src = '/visuals/zodiacsouth.PNG';
+    img.onload = () => {
+      setChartImage(img);
+    };
+  }, []);
   
   useEffect(() => {
     if (!canvasRef.current || !chartData) return;
@@ -93,343 +148,335 @@ export function ZodiacWheel({ chartData, width = 600, height = 600 }: ZodiacWhee
       // Clear canvas
       ctx.clearRect(0, 0, width, height);
       
-      // Draw the wheel
-      drawZodiacWheel(ctx);
+      // Draw background
+      drawBackground(ctx);
       
-      // Draw houses
-      drawHouses(ctx);
+      // Draw the South Indian Chart using the background image
+      if (chartImage) {
+        drawSouthIndianChart(ctx);
+      }
       
-      // Draw planets
+      // Draw planets in their respective houses
       drawPlanets(ctx);
       
-      // Draw aspects
-      if (chartData.aspects && chartData.aspects.length > 0) {
-        drawAspects(ctx);
-      }
+      // Draw chart info in the center
+      drawChartInfo(ctx);
+      
     } catch (error) {
       console.error('Error drawing zodiac wheel:', error);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chartData, width, height]);
+  }, [chartData, width, height, chartImage]);
   
-  const drawZodiacWheel = (ctx: CanvasRenderingContext2D) => {
-    // Draw zodiac ring
-    ctx.strokeStyle = '#fff';
+  const drawBackground = (ctx: CanvasRenderingContext2D) => {
+    // Create a solid black background
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, width, height);
+  };
+  
+  const drawSouthIndianChart = (ctx: CanvasRenderingContext2D) => {
+    if (!chartImage) return;
+    
+    // Calculate the size to maintain the square aspect ratio
+    const chartSize = Math.min(width, height) * 0.9;
+    
+    // Draw the background image
+    ctx.drawImage(
+      chartImage,
+      chartX,
+      chartY,
+      chartSize,
+      chartSize
+    );
+    
+    // Draw a thin white border around the chart for better visibility
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
     ctx.lineWidth = 1;
-    
-    // Draw outer circle
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, outerRadius, 0, 2 * Math.PI);
-    ctx.stroke();
-    
-    // Draw inner circle (zodiac inner boundary)
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, houseRadius, 0, 2 * Math.PI);
-    ctx.stroke();
-    
-    // Draw zodiac signs divisions (30 degrees each)
-    // Use the ascendant degree to position the wheel
-    const ascendantDegree = chartData?.ascendant?.longitude || 0;
-    
-    // Set up an array of colors for the zodiac signs
-    const elementColors: Record<string, string> = {
-      fire: 'rgba(255, 100, 50, 0.3)',  // Orange for Fire signs (Aries, Leo, Sagittarius)
-      earth: 'rgba(100, 200, 50, 0.3)', // Green for Earth signs (Taurus, Virgo, Capricorn)
-      air: 'rgba(100, 200, 255, 0.3)',  // Blue for Air signs (Gemini, Libra, Aquarius)
-      water: 'rgba(150, 100, 255, 0.3)'  // Purple for Water signs (Cancer, Scorpio, Pisces)
-    };
-    
-    // For counterclockwise progression
-    for (let i = 0; i < 12; i++) {
-      // Reverse the angle calculation for counterclockwise rotation
-      // Add 90 degrees to start with Aries at the 3 o'clock position
-      const startAngle = degToRad(90 - (i + 1) * 30 - ascendantDegree);
-      const endAngle = degToRad(90 - i * 30 - ascendantDegree);
-      
-      // Determine element based on traditional elemental order
-      // Aries (fire), Taurus (earth), Gemini (air), Cancer (water), etc.
-      const elements = ['fire', 'earth', 'air', 'water'];
-      const element = elements[i % 4];
-      
-      ctx.beginPath();
-      ctx.moveTo(centerX, centerY);
-      ctx.arc(centerX, centerY, outerRadius, startAngle, endAngle, false);
-      ctx.lineTo(centerX, centerY);
-      ctx.fillStyle = elementColors[element];
-      ctx.fill();
-      
-      // Draw segment line
-      ctx.beginPath();
-      ctx.moveTo(
-        centerX + houseRadius * Math.cos(startAngle),
-        centerY + houseRadius * Math.sin(startAngle)
-      );
-      ctx.lineTo(
-        centerX + outerRadius * Math.cos(startAngle),
-        centerY + outerRadius * Math.sin(startAngle)
-      );
-      ctx.strokeStyle = '#fff';
-      ctx.stroke();
-      
-      // Draw zodiac symbol in the middle of the segment
-      const symbolAngle = (startAngle + endAngle) / 2;
-      const symbolX = centerX + (houseRadius + zodiacWidth / 2) * Math.cos(symbolAngle);
-      const symbolY = centerY + (houseRadius + zodiacWidth / 2) * Math.sin(symbolAngle);
-      
-      ctx.font = 'bold 18px Arial';
-      ctx.fillStyle = '#fff';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      
-      // Ensure the symbol exists in the array - reverse the index for counterclockwise
-      const symbolIndex = (12 - i) % 12;
-      const symbol = ZODIAC_SYMBOLS[symbolIndex];
-      ctx.fillText(symbol, symbolX, symbolY);
-    }
+    ctx.strokeRect(chartX, chartY, chartSize, chartSize);
   };
   
-  const drawHouses = (ctx: CanvasRenderingContext2D) => {
-    if (!chartData || !chartData.houses) return;
+  // Helper function to get the cell coordinates for each house
+  const getHouseCellPosition = (houseIndex: number): {x: number, y: number} => {
+    // Convert from house index to grid position
+    // South Indian chart is arranged in a specific order around the central square
+    const positions = [
+      {x: 3, y: 3}, // House 1 (Pisces) - lower right
+      {x: 3, y: 2}, // House 2 (Aries) - going up
+      {x: 3, y: 1}, // House 3 (Taurus)
+      {x: 3, y: 0}, // House 4 (Gemini) - upper right
+      {x: 2, y: 0}, // House 5 (Cancer) - going left
+      {x: 1, y: 0}, // House 6 (Leo)
+      {x: 0, y: 0}, // House 7 (Virgo) - upper left
+      {x: 0, y: 1}, // House 8 (Libra) - going down
+      {x: 0, y: 2}, // House 9 (Scorpio)
+      {x: 0, y: 3}, // House 10 (Sagittarius) - lower left
+      {x: 1, y: 3}, // House 11 (Capricorn) - going right
+      {x: 2, y: 3}  // House 12 (Aquarius)
+    ];
     
-    const ascendantDegree = chartData.ascendant?.longitude || 0;
-    
-    // Draw inner wheel for houses
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, houseRadius * 0.5, 0, 2 * Math.PI);
-    ctx.strokeStyle = '#444';
-    ctx.stroke();
-    
-    // Draw house divisions
-    for (let i = 1; i <= 12; i++) {
-      const house = chartData.houses[`house${i}`];
-      if (!house) continue;
-      
-      // Make sure cusp is a number
-      const cusp = typeof house.cusp === 'number' ? house.cusp : (i - 1) * 30;
-      // Adjust angle calculation for counterclockwise rotation
-      const angle = degToRad(90 - cusp - ascendantDegree);
-      
-      // Draw house line
-      ctx.beginPath();
-      ctx.moveTo(centerX, centerY);
-      ctx.lineTo(
-        centerX + houseRadius * Math.cos(angle),
-        centerY + houseRadius * Math.sin(angle)
-      );
-      
-      // Make house cusps 1, 4, 7, 10 (angular houses) stand out
-      if (i === 1 || i === 4 || i === 7 || i === 10) {
-        ctx.strokeStyle = '#ffcc00';
-        ctx.lineWidth = 2;
-      } else {
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
-        ctx.lineWidth = 1;
-      }
-      ctx.stroke();
-      ctx.lineWidth = 1; // Reset line width
-      
-      // Draw house number near the center
-      const numberRadius = houseRadius * 0.25;
-      const numberAngle = angle + (i === 1 ? degToRad(-10) : (i === 7 ? degToRad(10) : 0));
-      const numberX = centerX + numberRadius * Math.cos(numberAngle);
-      const numberY = centerY + numberRadius * Math.sin(numberAngle);
-      
-      ctx.font = 'bold 14px Arial';
-      ctx.fillStyle = '#fff';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(i.toString(), numberX, numberY);
-    }
+    return positions[houseIndex];
   };
   
+  // Get house index for a sign based on its longitude
+  const getHouseForLongitude = (longitude: number): number => {
+    // Convert longitude to sign index (0-11)
+    const signIndex = Math.floor(longitude / 30) % 12;
+    
+    // Find the position of this sign in the South Indian chart
+    return SOUTH_INDIAN_CHART_ORDER.indexOf(signIndex);
+  };
+  
+  // Draw planets in their respective houses
   const drawPlanets = (ctx: CanvasRenderingContext2D) => {
     if (!chartData || !chartData.planets) return;
     
-    const ascendantDegree = chartData.ascendant?.longitude || 0;
-    
-    // Define colors for planets
-    const planetColors: Record<string, string> = {
-      sun: '#ffcc00',       // Gold
-      moon: '#e6e6fa',      // Light lavender
-      mercury: '#66ccff',   // Light blue
-      venus: '#ff99cc',     // Pink
-      mars: '#ff3333',      // Red
-      jupiter: '#9966ff',   // Purple
-      saturn: '#996633',    // Brown
-      uranus: '#00cccc',    // Teal
-      neptune: '#3366ff',   // Blue
-      pluto: '#663333',     // Dark brown
-      ascendant: '#ffffff', // White
-      meanNode: '#99cc66',  // Light green
-      trueNode: '#99cc66',  // Light green
-      meanLilith: '#cc33ff', // Magenta
-      chiron: '#66ffcc'     // Mint
-    };
-    
-    // Filter valid planets with longitude data
+    // Filter valid planets with longitude data and exclude mean node
     const planetEntries = Object.entries(chartData.planets)
-      .filter(([_, planet]) => planet && typeof planet.longitude === 'number');
+      .filter(([name, planet]) => 
+        planet && 
+        typeof planet.longitude === 'number' && 
+        name !== 'meanNode'  // Exclude mean node
+      );
     
     // Skip if no valid planets
     if (planetEntries.length === 0) return;
     
-    // Sort planets by longitude to handle overlaps
-    planetEntries.sort(([_, a], [__, b]) => a.longitude - b.longitude);
+    // Find the ascendant sign for marking
+    const ascendantSign = Math.floor((chartData.ascendant?.longitude || 0) / 30) % 12;
+    const ascendantHouseIndex = SOUTH_INDIAN_CHART_ORDER.indexOf(ascendantSign);
     
-    // Draw lines from each planet to the edge to show their position
-    for (const [name, planet] of planetEntries) {
-      if (name === 'ascendant') continue;
+    // Mark the ascendant house with just a triangle in the upper right corner
+    if (ascendantHouseIndex >= 0) {
+      const cellPos = getHouseCellPosition(ascendantHouseIndex);
+      const x = chartX + (cellPos.x + 0.9) * cellSize;
+      const y = chartY + (cellPos.y + 0.1) * cellSize;
       
-      const longitude = planet.longitude;
-      // Adjust angle calculation for counterclockwise rotation
-      const angle = degToRad(90 - longitude - ascendantDegree);
-      
-      // Draw guiding line to edge
+      // Draw a colored triangle with semi-transparency
+      ctx.globalAlpha = 0.9;
       ctx.beginPath();
-      ctx.moveTo(centerX, centerY);
-      ctx.lineTo(
-        centerX + outerRadius * Math.cos(angle),
-        centerY + outerRadius * Math.sin(angle)
-      );
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - 20, y);
+      ctx.lineTo(x, y + 20);
+      ctx.closePath();
+      ctx.fillStyle = '#ff0'; // Bright yellow
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1;
       ctx.stroke();
+      ctx.globalAlpha = 1.0; // Reset alpha
     }
     
-    // Track positions to avoid overlaps
-    const placedPositions: {angle: number, radius: number}[] = [];
+    // Group planets by house
+    const planetsByHouse: Record<number, Array<{name: string, planet: Planet}>> = {};
     
-    // Place all planets
     for (const [name, planet] of planetEntries) {
-      // Skip the Ascendant as it's already positioned at the eastern horizon
-      if (name === 'ascendant') continue;
-      
-      // Calculate base angle and position
-      const longitude = planet.longitude;
-      // Adjust angle calculation for counterclockwise rotation
-      const angle = degToRad(90 - longitude - ascendantDegree);
-      
-      // Base radius is where we'd normally place the planet
-      let radius = planetRadius;
-      
-      // Check for collisions with previously placed planets
-      for (const pos of placedPositions) {
-        const angleDiff = Math.abs(angle - pos.angle);
-        // If planets are too close, adjust the radius
-        if (angleDiff < degToRad(10)) {
-          radius = pos.radius - 20; // Place it inward
-        }
+      const houseIndex = getHouseForLongitude(planet.longitude);
+      if (!planetsByHouse[houseIndex]) {
+        planetsByHouse[houseIndex] = [];
       }
-      
-      // Store this planet's position
-      placedPositions.push({ angle, radius });
-      
-      // Calculate final position
-      const planetX = centerX + radius * Math.cos(angle);
-      const planetY = centerY + radius * Math.sin(angle);
-      
-      // Draw planet background
-      ctx.beginPath();
-      ctx.fillStyle = planetColors[name] || '#ffffff';
-      ctx.arc(planetX, planetY, 14, 0, 2 * Math.PI);
-      ctx.fill();
-      
-      // Draw planet border
-      ctx.beginPath();
-      ctx.arc(planetX, planetY, 14, 0, 2 * Math.PI);
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      
-      // Draw planet symbol
-      ctx.font = 'bold 16px Arial';
-      ctx.fillStyle = '#000';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(PLANET_SYMBOLS[name] || name.charAt(0).toUpperCase(), planetX, planetY);
-      
-      // Draw degree text near the planet
-      const degreeX = planetX + 25 * Math.cos(angle);
-      const degreeY = planetY + 25 * Math.sin(angle);
-      ctx.font = '10px Arial';
-      ctx.fillStyle = '#fff';
-      ctx.fillText(`${planet.name} ${planet.degree.toFixed(1)}°`, degreeX, degreeY);
+      planetsByHouse[houseIndex].push({name, planet});
     }
     
-    // Draw Ascendant marker (at the eastern horizon, position depends on chart orientation)
-    // Find the ascendant in the planets
-    const ascendant = chartData.planets.ascendant || chartData.ascendant;
-    if (ascendant) {
-      // Adjust angle for counterclockwise rotation
-      const ascAngle = degToRad(90 - ascendant.longitude - ascendantDegree);
-      const ascX = centerX + houseRadius * Math.cos(ascAngle);
-      const ascY = centerY + houseRadius * Math.sin(ascAngle);
+    // Draw planets in each house
+    for (const [houseIndexStr, planets] of Object.entries(planetsByHouse)) {
+      const houseIndex = parseInt(houseIndexStr);
+      const cellPos = getHouseCellPosition(houseIndex);
       
-      // Draw a bright golden circle for the Ascendant
-      ctx.beginPath();
-      ctx.fillStyle = '#ffcc00';
-      ctx.arc(ascX, ascY, 14, 0, 2 * Math.PI);
-      ctx.fill();
+      // Arrange planets within the cell
+      const numPlanets = planets.length;
+      const padding = 0.15; // Padding from cell edges
+      const spacing = (1 - 2 * padding) / Math.max(numPlanets, 1);
       
-      ctx.beginPath();
-      ctx.arc(ascX, ascY, 14, 0, 2 * Math.PI);
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      
-      ctx.font = 'bold 12px Arial';
-      ctx.fillStyle = '#000';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('ASC', ascX, ascY);
-      ctx.lineWidth = 1;
+      planets.forEach((planetData, index) => {
+        const {name, planet} = planetData;
+        
+        // Calculate position for this planet within the cell
+        let x, y;
+        if (numPlanets <= 2) {
+          // For 1-2 planets, center them in the cell
+          x = chartX + (cellPos.x + 0.5) * cellSize;
+          y = chartY + (cellPos.y + 0.5 + (index - numPlanets/2 + 0.5) * 0.3) * cellSize;
+        } else {
+          // For 3+ planets, arrange in a grid pattern
+          const cols = Math.ceil(Math.sqrt(numPlanets));
+          const rows = Math.ceil(numPlanets / cols);
+          const col = index % cols;
+          const row = Math.floor(index / cols);
+          
+          x = chartX + (cellPos.x + padding + (col + 0.5) * (1 - 2 * padding) / cols) * cellSize;
+          y = chartY + (cellPos.y + padding + (row + 0.5) * (1 - 2 * padding) / rows) * cellSize;
+        }
+        
+        // Draw a semi-transparent black background for better visibility
+        ctx.beginPath();
+        ctx.rect(x - 14, y - 14, 28, 28);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fill();
+        
+        // Draw planet symbol with larger font directly (no circle)
+        // Special case for Sun - make it larger than other planets
+        if (name === 'sun') {
+          ctx.font = 'bold 26px Arial';  // 2px larger for the Sun
+        } else {
+          ctx.font = 'bold 24px Arial';
+        }
+        ctx.fillStyle = planetColors[name] || '#fff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(PLANET_SYMBOLS[name] || name.charAt(0).toUpperCase(), x, y);
+        
+        // Show degree as small text below planet
+        const degText = planet.degree.toFixed(0) + '°';
+        ctx.font = '10px Arial';
+        ctx.fillStyle = '#fff';
+        ctx.fillText(degText, x, y + 22);
+      });
     }
   };
   
-  const drawAspects = (ctx: CanvasRenderingContext2D) => {
-    if (!chartData || !chartData.aspects || !chartData.planets) return;
+  // Draw chart information in the center box
+  const drawChartInfo = (ctx: CanvasRenderingContext2D) => {
+    // Center area coordinates
+    const centerX = chartX + cellSize * 1.1;
+    const centerY = chartY + cellSize * 1.1;
+    const centerWidth = cellSize * 1.8;
+    const centerHeight = cellSize * 1.8;
     
-    const aspectColors: Record<string, string> = {
-      'Conjunction': 'rgba(255, 255, 255, 0.3)',
-      'Opposition': 'rgba(255, 50, 50, 0.3)',
-      'Trine': 'rgba(50, 255, 50, 0.3)',
-      'Square': 'rgba(255, 150, 50, 0.3)',
-      'Sextile': 'rgba(100, 100, 255, 0.3)',
-      'Quincunx': 'rgba(200, 100, 200, 0.3)',
-      'Semi-Square': 'rgba(200, 200, 200, 0.3)',
-      'Semi-Sextile': 'rgba(150, 150, 150, 0.3)'
-    };
+    // Draw a semi-transparent background for better text readability
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(centerX, centerY, centerWidth, centerHeight);
     
-    const ascendantDegree = chartData.ascendant?.longitude || 0;
+    // Add inner border for aesthetics
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.lineWidth = 0;
+    ctx.strokeRect(
+      centerX + 5, 
+      centerY + 5, 
+      centerWidth - 10, 
+      centerHeight - 10
+    );
     
-    // Draw aspect lines between planets
-    for (const aspect of chartData.aspects) {
-      const planet1 = chartData.planets[aspect.planet1];
-      const planet2 = chartData.planets[aspect.planet2];
+    // Draw chart title
+    ctx.font = 'bold 16px Arial';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText('Birth Chart', centerX + centerWidth / 2, centerY + 10);
+    
+    // Draw date, time, location if available - with improved visibility
+    let yOffset = 35;
+    
+    // Draw a header for birth info
+    ctx.font = 'bold 14px Arial';
+    ctx.fillStyle = '#fff';
+    ctx.fillText('Birth Information', centerX + centerWidth / 2, centerY + yOffset);
+    yOffset += 20;
+    
+    // Date
+    if (chartData.date) {
+      ctx.font = '13px Arial';
+      ctx.fillStyle = '#ffcc00'; // Use a brighter color for label
+      ctx.textAlign = 'right';
+      ctx.fillText('Date:', centerX + centerWidth / 2 - 5, centerY + yOffset);
       
-      if (!planet1 || !planet2) continue;
-      
-      // Calculate angles for both planets
-      const angle1 = degToRad(90 - planet1.longitude - ascendantDegree);
-      const angle2 = degToRad(90 - planet2.longitude - ascendantDegree);
-      
-      // Use a smaller radius to draw the aspect lines inside the chart
-      const aspectRadius = houseRadius * 0.4;
-      
-      // Calculate positions
-      const x1 = centerX + aspectRadius * Math.cos(angle1);
-      const y1 = centerY + aspectRadius * Math.sin(angle1);
-      const x2 = centerX + aspectRadius * Math.cos(angle2);
-      const y2 = centerY + aspectRadius * Math.sin(angle2);
-      
-      // Draw the aspect line
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.strokeStyle = aspectColors[aspect.aspect] || 'rgba(255, 255, 255, 0.2)';
-      ctx.lineWidth = aspect.influence === 'Strong' ? 2 : 1;
-      ctx.stroke();
-      ctx.lineWidth = 1; // Reset line width
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'left';
+      ctx.fillText(chartData.date, centerX + centerWidth / 2 + 5, centerY + yOffset);
+      yOffset += 18;
     }
+    
+    // Time
+    if (chartData.time) {
+      ctx.font = '13px Arial';
+      ctx.fillStyle = '#ffcc00'; // Use a brighter color for label
+      ctx.textAlign = 'right';
+      ctx.fillText('Time:', centerX + centerWidth / 2 - 5, centerY + yOffset);
+      
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'left';
+      ctx.fillText(chartData.time, centerX + centerWidth / 2 + 5, centerY + yOffset);
+      yOffset += 18;
+    }
+    
+    // Location
+    if (chartData.location) {
+      ctx.font = '13px Arial';
+      ctx.fillStyle = '#ffcc00'; // Use a brighter color for label
+      ctx.textAlign = 'right';
+      ctx.fillText('Location:', centerX + centerWidth / 2 - 5, centerY + yOffset);
+      
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'left';
+      const locationText = chartData.location.length > 30 
+        ? chartData.location.substring(0, 30) + '...' 
+        : chartData.location;
+      ctx.fillText(locationText, centerX + centerWidth / 2 + 5, centerY + yOffset);
+      yOffset += 25;
+    }
+    
+    // Divider line
+    ctx.beginPath();
+    ctx.moveTo(centerX + 15, centerY + yOffset - 5);
+    ctx.lineTo(centerX + centerWidth - 15, centerY + yOffset - 5);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.stroke();
+    
+    // Draw planetary positions in a more compact format
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'left';
+    
+    const planetKeys = Object.keys(chartData.planets).filter(key => 
+      key !== 'ascendant' && key !== 'meanNode'
+    );
+    
+    // Use 3 columns for more compact display
+    const planetsPerColumn = Math.ceil(planetKeys.length / 3);
+    const colWidth = centerWidth / 3;
+    
+    planetKeys.forEach((key, index) => {
+      const planet = chartData.planets[key];
+      if (!planet) return;
+      
+      const column = Math.floor(index / planetsPerColumn);
+      const row = index % planetsPerColumn;
+      
+      const x = centerX + 10 + column * colWidth;
+      const y = centerY + yOffset + row * 16;
+      
+      // Abbreviate sign names to 3 letters
+      const signAbbr = getSignAbbreviation(planet.name);
+      const position = `${planet.degree.toFixed(0)}° ${signAbbr}`;
+      
+      // Draw planet name entirely in its color
+      ctx.fillStyle = planetColors[key] || '#fff';
+      const planetName = key.charAt(0).toUpperCase() + key.slice(1, 3);
+      ctx.fillText(planetName + ':', x, y);
+      
+      // Draw position in white
+      ctx.fillStyle = '#fff';
+      ctx.fillText(position, x + 30, y);
+    });
+    
+    // Draw ascendant information
+    if (chartData.ascendant) {
+      const asc = chartData.ascendant;
+      const signAbbr = getSignAbbreviation(asc.name);
+      
+      ctx.fillStyle = '#ff0'; // Yellow for ascendant
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 12px Arial';
+      ctx.fillText(
+        `Asc: ${asc.degree.toFixed(0)}° ${signAbbr}`,
+        centerX + centerWidth / 2,
+        centerY + centerHeight - 15
+      );
+    }
+  };
+  
+  // Helper function to abbreviate sign names
+  const getSignAbbreviation = (signName: string): string => {
+    // Return first 3 letters of sign name
+    return signName.substring(0, 3);
   };
   
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -440,50 +487,54 @@ export function ZodiacWheel({ chartData, width = 600, height = 600 }: ZodiacWhee
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     
-    // Calculate distance from center
-    const dx = x - centerX;
-    const dy = y - centerY;
-    const distance = Math.sqrt(dx * dx + dy * dy);
+    // Convert coordinates to cell position
+    const cellX = Math.floor((x - chartX) / cellSize);
+    const cellY = Math.floor((y - chartY) / cellSize);
     
-    // If outside the chart area, hide tooltip
-    if (distance > outerRadius) {
+    // Check if mouse is over a valid house cell (not the center)
+    let houseIndex = -1;
+    
+    if (cellX >= 0 && cellX < 4 && cellY >= 0 && cellY < 4) {
+      // Skip center area
+      if (!(cellX === 1 && cellY === 1) && 
+          !(cellX === 1 && cellY === 2) && 
+          !(cellX === 2 && cellY === 1) && 
+          !(cellX === 2 && cellY === 2)) {
+          
+        // Find which house cell this is
+        for (let i = 0; i < 12; i++) {
+          const pos = getHouseCellPosition(i);
+          if (pos.x === cellX && pos.y === cellY) {
+            houseIndex = i;
+            break;
+          }
+        }
+      }
+    }
+    
+    // If not over a house cell, hide tooltip
+    if (houseIndex === -1) {
       setTooltipInfo(null);
       return;
     }
     
-    // Calculate angle in degrees
-    let angle = Math.atan2(dy, dx) * 180 / Math.PI;
-    if (angle < 0) angle += 360;
+    // Get the sign for this house
+    const signIndex = SOUTH_INDIAN_CHART_ORDER[houseIndex];
+    const signName = ZODIAC_SIGNS[signIndex];
     
-    // Adjust to start from top (90 degrees)
-    angle = (90 - angle + 360) % 360;
-    
-    // Adjust for ascendant
-    const ascendantDegree = chartData.ascendant?.longitude || 0;
-    angle = (angle + ascendantDegree) % 360;
-    
-    // Find which sign this is
-    const signIndex = Math.floor(angle / 30);
-    const degreesInSign = angle % 30;
-    
-    // Find nearby planets (within 5 degrees)
-    const nearbyPlanets = Object.entries(chartData.planets)
+    // Find planets in this house
+    const planetsInHouse = Object.entries(chartData.planets)
       .filter(([_, planet]) => {
-        const planetAngle = planet.longitude % 360;
-        const angleDiff = Math.min(
-          Math.abs(angle - planetAngle),
-          Math.abs(angle - planetAngle + 360),
-          Math.abs(angle - planetAngle - 360)
-        );
-        return angleDiff < 5;
+        const planetSignIndex = Math.floor(planet.longitude / 30) % 12;
+        return planetSignIndex === signIndex;
       });
     
     // Create tooltip text
-    let tooltipText = `${ZODIAC_SIGNS[signIndex]} ${degreesInSign.toFixed(1)}°`;
+    let tooltipText = `${signName}`;
     
-    if (nearbyPlanets.length > 0) {
-      tooltipText += '\n' + nearbyPlanets
-        .map(([name, planet]) => `${name}: ${planet.name} ${planet.degree.toFixed(1)}°`)
+    if (planetsInHouse.length > 0) {
+      tooltipText += '\n' + planetsInHouse
+        .map(([name, planet]) => `${name}: ${planet.degree.toFixed(1)}°`)
         .join('\n');
     }
     
@@ -502,7 +553,7 @@ export function ZodiacWheel({ chartData, width = 600, height = 600 }: ZodiacWhee
         height={height}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
-        className="border border-gray-700 rounded-lg bg-gradient-to-br from-gray-900 to-black shadow-xl cursor-crosshair"
+        className="border border-gray-700 rounded-lg shadow-xl cursor-crosshair"
       />
       
       {tooltipInfo && (
@@ -517,25 +568,6 @@ export function ZodiacWheel({ chartData, width = 600, height = 600 }: ZodiacWhee
           {tooltipInfo.text}
         </div>
       )}
-      
-      <div className="absolute bottom-4 right-4 bg-black bg-opacity-70 rounded-md p-2 text-xs">
-        <div className="flex items-center mb-1">
-          <div className="w-3 h-3 rounded-full bg-red-500 bg-opacity-60 mr-2"></div>
-          <span className="text-white">Fire Signs</span>
-        </div>
-        <div className="flex items-center mb-1">
-          <div className="w-3 h-3 rounded-full bg-green-500 bg-opacity-60 mr-2"></div>
-          <span className="text-white">Earth Signs</span>
-        </div>
-        <div className="flex items-center mb-1">
-          <div className="w-3 h-3 rounded-full bg-blue-500 bg-opacity-60 mr-2"></div>
-          <span className="text-white">Air Signs</span>
-        </div>
-        <div className="flex items-center">
-          <div className="w-3 h-3 rounded-full bg-purple-500 bg-opacity-60 mr-2"></div>
-          <span className="text-white">Water Signs</span>
-        </div>
-      </div>
     </div>
   );
 }
