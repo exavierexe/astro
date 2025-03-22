@@ -89,6 +89,7 @@ type ZodiacWheelProps = {
   height?: number;
   onSaveChart?: (chartData: ChartData) => void;
   onTitleChange?: (title: string) => void;
+  hideControls?: boolean; // New prop to hide edit title and export buttons
 };
 
 // Helper function to export chart as PNG image
@@ -116,7 +117,8 @@ export function ZodiacWheel({
   width = 600, 
   height = 600,
   onSaveChart,
-  onTitleChange
+  onTitleChange,
+  hideControls = false
 }: ZodiacWheelProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [tooltipInfo, setTooltipInfo] = useState<{ x: number; y: number; text: string } | null>(null);
@@ -638,52 +640,54 @@ export function ZodiacWheel({
         </div>
       )}
 
-      <div className="mt-4 flex flex-col gap-2">
-        <div className="flex items-center gap-2">
-          {isEditingTitle ? (
-            <div className="flex-1 flex gap-2">
-              <input
-                type="text"
-                value={titleValue}
-                onChange={handleTitleChange}
-                className="flex-1 p-2 rounded border border-gray-500 bg-gray-800 text-white"
-                placeholder="Chart Title"
-              />
+      {!hideControls && (
+        <div className="mt-4 flex flex-col gap-2">
+          <div className="flex items-center gap-2 pl-4">
+            {isEditingTitle ? (
+              <div className="flex-1 flex gap-2">
+                <input
+                  type="text"
+                  value={titleValue}
+                  onChange={handleTitleChange}
+                  className="flex-1 p-2 rounded border border-gray-500 bg-gray-800 text-white"
+                  placeholder="Chart Title"
+                />
+                <button 
+                  onClick={handleTitleSave}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded"
+                >
+                  Save Title
+                </button>
+              </div>
+            ) : (
               <button 
-                onClick={handleTitleSave}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded"
+                onClick={handleTitleEdit}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded"
               >
-                Save Title
+                Edit Title
               </button>
-            </div>
-          ) : (
-            <button 
-              onClick={handleTitleEdit}
-              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded"
-            >
-              Edit Title
-            </button>
-          )}
-        </div>
-        
-        <div className="flex items-center gap-2">
-          <button 
-            onClick={handleExportChart}
-            className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded"
-          >
-            Export as PNG
-          </button>
+            )}
+          </div>
           
-          {onSaveChart && (
+          <div className="flex items-center gap-2">
             <button 
-              onClick={handleSaveChart}
-              className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded"
+              onClick={handleExportChart}
+              className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded"
             >
-              Save Chart
+              Export as PNG
             </button>
-          )}
+            
+            {onSaveChart && (
+              <button 
+                onClick={handleSaveChart}
+                className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded"
+              >
+                Save Chart
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

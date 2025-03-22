@@ -14,18 +14,19 @@ datasource db {
 }
 
 model User {
-  id          Int @id @default(autoincrement())  
-  uname       String 
-  email       String   
-  phone       String
-  birthday    String
-  time        String
-  location    String
-  questions   String
-  rtype       String
-  price       String
-  birthCharts BirthChart[]
-  tarotReadings TarotReading[]
+  id              Int @id @default(autoincrement())  
+  uname           String 
+  email           String   
+  phone           String
+  birthday        String
+  time            String
+  location        String
+  questions       String
+  rtype           String
+  price           String
+  defaultChartId  Int?
+  birthCharts     BirthChart[]
+  tarotReadings   TarotReading[]
 }
 
 model BirthChart {

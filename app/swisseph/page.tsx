@@ -1,12 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { useUser } from '@clerk/nextjs'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { querySwissEph, saveBirthChart, getBirthChartById } from '@/actions'
+import { querySwissEph, saveBirthChart, getBirthChartById, getDefaultChart } from '@/actions'
 import { ZodiacWheel, type ChartData, exportChartAsImage } from '@/components/ui/zodiacwheel'
 import { SavedBirthCharts } from '@/components/ui/birth-chart-calculator'
 
@@ -300,9 +302,20 @@ const ZODIAC_SIGNS = [
 const ZODIAC_SYMBOLS = ['♈', '♉', '♊', '♋', '♌', '♍', '♎', '♏', '♐', '♑', '♒', '♓'];
 
 export default function SwissEphPage() {
-  const [date, setDate] = useState('')
-  const [time, setTime] = useState('')
-  const [location, setLocation] = useState('')
+  const { isLoaded, isSignedIn, user } = useUser();
+  const searchParams = useSearchParams();
+  const chartIdFromUrl = searchParams.get('chart');
+  
+  // Get current date in DD.MM.YYYY format
+  const currentDate = new Date();
+  const formattedDate = `${currentDate.getDate().toString().padStart(2, '0')}.${(currentDate.getMonth() + 1).toString().padStart(2, '0')}.${currentDate.getFullYear()}`;
+  
+  // Get current time in HH:MM format
+  const formattedTime = `${currentDate.getHours().toString().padStart(2, '0')}:${currentDate.getMinutes().toString().padStart(2, '0')}`;
+  
+  const [date, setDate] = useState(formattedDate)
+  const [time, setTime] = useState(formattedTime)
+  const [location, setLocation] = useState('New York, NY, USA') // Default to New York
   const [result, setResult] = useState<{ output: string; error?: string } | null>(null)
   const [loading, setLoading] = useState(false)
   const [chartData, setChartData] = useState<ChartData | null>(null)
@@ -311,6 +324,7 @@ export default function SwissEphPage() {
   const [saveResult, setSaveResult] = useState<{ success: boolean; error?: string; chartId?: number } | null>(null)
   const [selectedChartId, setSelectedChartId] = useState<number | null>(null)
   const [loadingStoredChart, setLoadingStoredChart] = useState(false)
+  const [initialLoadDone, setInitialLoadDone] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -428,6 +442,122 @@ export default function SwissEphPage() {
     });
   }
   
+  // Load user's default chart or URL-specified chart on component mount
+  useEffect(() => {
+    const loadInitialChart = async () => {
+      if (initialLoadDone || !isLoaded) return;
+      
+      try {
+        setLoadingStoredChart(true);
+        
+        let chartToLoad = null;
+        
+        // If there's a chart ID in the URL, try to load that chart
+        if (chartIdFromUrl) {
+          const chartId = parseInt(chartIdFromUrl);
+          if (!isNaN(chartId)) {
+            chartToLoad = await getBirthChartById(chartId);
+            setSelectedChartId(chartId);
+          }
+        } 
+        // Otherwise, if the user is signed in, try to load their default chart
+        else if (isSignedIn && user) {
+          const userId = parseInt(user.id);
+          if (!isNaN(userId)) {
+            chartToLoad = await getDefaultChart(userId);
+            if (chartToLoad) {
+              setSelectedChartId(chartToLoad.id);
+            }
+          }
+        }
+        
+        // If we found a chart to load, convert and display it
+        if (chartToLoad) {
+          // Convert the stored chart to our ChartData format
+          // Parse planet positions from stored strings
+          const planets: Record<string, any> = {};
+          
+          // Helper function to parse stored position strings like "Aries 15.5°"
+          const parsePosition = (posStr: string | null): { name: string; symbol: string; longitude: number; degree: number } | null => {
+            if (!posStr) return null;
+            
+            // Extract sign name and degrees
+            const match = posStr.match(/([A-Za-z]+)\s+(\d+\.?\d*)°/);
+            if (!match) return null;
+            
+            const signName = match[1];
+            const degree = parseFloat(match[2]);
+            
+            // Find sign index
+            const signIndex = ZODIAC_SIGNS.findIndex(sign => 
+              sign.toLowerCase() === signName.toLowerCase()
+            );
+            
+            if (signIndex === -1) return null;
+            
+            // Calculate absolute longitude (0-360)
+            const longitude = signIndex * 30 + degree;
+            
+            return {
+              name: ZODIAC_SIGNS[signIndex],
+              symbol: ZODIAC_SYMBOLS[signIndex],
+              longitude,
+              degree
+            };
+          };
+          
+          // Add planets
+          if (chartToLoad.sun) planets.sun = parsePosition(chartToLoad.sun);
+          if (chartToLoad.moon) planets.moon = parsePosition(chartToLoad.moon);
+          if (chartToLoad.mercury) planets.mercury = parsePosition(chartToLoad.mercury);
+          if (chartToLoad.venus) planets.venus = parsePosition(chartToLoad.venus);
+          if (chartToLoad.mars) planets.mars = parsePosition(chartToLoad.mars);
+          if (chartToLoad.jupiter) planets.jupiter = parsePosition(chartToLoad.jupiter);
+          if (chartToLoad.saturn) planets.saturn = parsePosition(chartToLoad.saturn);
+          if (chartToLoad.uranus) planets.uranus = parsePosition(chartToLoad.uranus);
+          if (chartToLoad.neptune) planets.neptune = parsePosition(chartToLoad.neptune);
+          if (chartToLoad.pluto) planets.pluto = parsePosition(chartToLoad.pluto);
+          
+          // Parse ascendant
+          const ascendant = parsePosition(chartToLoad.ascendant) || { 
+            name: 'Unknown', symbol: '?', longitude: 0, degree: 0 
+          };
+          
+          const convertedChart: ChartData = {
+            title: chartToLoad.name,
+            date: new Date(chartToLoad.birthDate).toLocaleDateString(),
+            time: chartToLoad.birthTime,
+            location: chartToLoad.birthPlace,
+            planets,
+            houses: chartToLoad.houses as any || {},
+            aspects: chartToLoad.aspects as any || [],
+            ascendant,
+            id: chartToLoad.id,
+          };
+          
+          // Set chart data and show the chart
+          setChartData(convertedChart);
+          setShowChart(true);
+        }
+        
+        // If no chart was loaded but we have a date and time, show the current chart
+        if (!chartToLoad && !date && !time) {
+          // Get the current date and time
+          const now = new Date();
+          setDate(`${now.getDate().toString().padStart(2, '0')}.${(now.getMonth() + 1).toString().padStart(2, '0')}.${now.getFullYear()}`);
+          setTime(`${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`);
+        }
+      } catch (error) {
+        console.error('Error loading initial chart:', error);
+      } finally {
+        setLoadingStoredChart(false);
+        setInitialLoadDone(true);
+      }
+    };
+    
+    loadInitialChart();
+  }, [chartIdFromUrl, isLoaded, isSignedIn, user, initialLoadDone, date, time]);
+  
   // Handler for selecting a saved chart
   const handleSelectChart = async (chartId: number) => {
     try {
@@ -443,16 +573,64 @@ export default function SwissEphPage() {
       }
       
       // Convert the stored chart to our ChartData format
-      // This is a simplified conversion - you'd need to map the database schema to ChartData
+      // Parse planet positions from stored strings
+      const planets: Record<string, any> = {};
+      
+      // Helper function to parse stored position strings like "Aries 15.5°"
+      const parsePosition = (posStr: string | null): { name: string; symbol: string; longitude: number; degree: number } | null => {
+        if (!posStr) return null;
+        
+        // Extract sign name and degrees
+        const match = posStr.match(/([A-Za-z]+)\s+(\d+\.?\d*)°/);
+        if (!match) return null;
+        
+        const signName = match[1];
+        const degree = parseFloat(match[2]);
+        
+        // Find sign index
+        const signIndex = ZODIAC_SIGNS.findIndex(sign => 
+          sign.toLowerCase() === signName.toLowerCase()
+        );
+        
+        if (signIndex === -1) return null;
+        
+        // Calculate absolute longitude (0-360)
+        const longitude = signIndex * 30 + degree;
+        
+        return {
+          name: ZODIAC_SIGNS[signIndex],
+          symbol: ZODIAC_SYMBOLS[signIndex],
+          longitude,
+          degree
+        };
+      };
+      
+      // Add planets
+      if (savedChart.sun) planets.sun = parsePosition(savedChart.sun);
+      if (savedChart.moon) planets.moon = parsePosition(savedChart.moon);
+      if (savedChart.mercury) planets.mercury = parsePosition(savedChart.mercury);
+      if (savedChart.venus) planets.venus = parsePosition(savedChart.venus);
+      if (savedChart.mars) planets.mars = parsePosition(savedChart.mars);
+      if (savedChart.jupiter) planets.jupiter = parsePosition(savedChart.jupiter);
+      if (savedChart.saturn) planets.saturn = parsePosition(savedChart.saturn);
+      if (savedChart.uranus) planets.uranus = parsePosition(savedChart.uranus);
+      if (savedChart.neptune) planets.neptune = parsePosition(savedChart.neptune);
+      if (savedChart.pluto) planets.pluto = parsePosition(savedChart.pluto);
+      
+      // Parse ascendant
+      const ascendant = parsePosition(savedChart.ascendant) || { 
+        name: 'Unknown', symbol: '?', longitude: 0, degree: 0 
+      };
+      
       const convertedChart: ChartData = {
         title: savedChart.name,
         date: new Date(savedChart.birthDate).toLocaleDateString(),
         time: savedChart.birthTime,
         location: savedChart.birthPlace,
-        planets: {}, // We'd need to parse the planet positions from strings
+        planets,
         houses: savedChart.houses as any || {},
         aspects: savedChart.aspects as any || [],
-        ascendant: { name: 'Unknown', symbol: '', longitude: 0, degree: 0 },
+        ascendant,
         id: savedChart.id,
       };
       

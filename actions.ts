@@ -1561,6 +1561,73 @@ export const getBirthChartById = async (chartId: number) => {
   }
 };
 
+// Set a user's default chart
+export const setDefaultChart = async (userId: number, chartId: number) => {
+  try {
+    if (!userId || !chartId) {
+      return {
+        success: false,
+        error: "Missing user ID or chart ID."
+      };
+    }
+    
+    // First, verify that the chart belongs to this user
+    const chart = await prisma.birthChart.findFirst({
+      where: {
+        id: chartId,
+        userId: userId
+      }
+    });
+    
+    if (!chart) {
+      return {
+        success: false,
+        error: "Chart not found or does not belong to this user."
+      };
+    }
+    
+    // Update user's default chart preference
+    // Note: You would need to add a defaultChartId field to your User model
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        defaultChartId: chartId
+      }
+    });
+    
+    return { success: true };
+  } catch (error) {
+    console.error("Error setting default chart:", error);
+    return { 
+      success: false, 
+      error: "Failed to set default chart. Please try again."
+    };
+  }
+};
+
+// Get a user's default chart
+export const getDefaultChart = async (userId: number) => {
+  try {
+    if (!userId) return null;
+    
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { defaultChartId: true }
+    });
+    
+    if (!user || !user.defaultChartId) return null;
+    
+    const chart = await prisma.birthChart.findUnique({
+      where: { id: user.defaultChartId }
+    });
+    
+    return chart;
+  } catch (error) {
+    console.error("Error fetching default chart:", error);
+    return null;
+  }
+};
+
 // Delete a birth chart
 export const deleteBirthChart = async (chartId: number) => {
   try {
