@@ -1,163 +1,152 @@
-"use client";
+'use client';
 
-import React, { useState } from 'react';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "./card";
-import { Button } from "./button";
-import { Label } from "./label";
-import { Input } from "./input";
-import { calculateBirthChartWithSwissEph } from "@/actions";
+import { useState, useEffect } from 'react';
+import { Card } from './card';
+import { Button } from './button';
+import { getBirthCharts, deleteBirthChart } from '@/actions';
 
-export function BirthChartCalculator() {
-  const [isLoading, setIsLoading] = useState(false);
+type SavedChartProps = {
+  userId?: number;
+  onSelectChart?: (chartId: number) => void;
+};
+
+export function SavedBirthCharts({ userId, onSelectChart }: SavedChartProps) {
+  const [charts, setCharts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [chartData, setChartData] = useState<any>(null);
+  const [deleteStatus, setDeleteStatus] = useState<{ id: number; status: 'pending' | 'success' | 'error' } | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError(null);
-    setChartData(null);
+  // Load charts when component mounts
+  useEffect(() => {
+    const loadCharts = async () => {
+      try {
+        setLoading(true);
+        const savedCharts = await getBirthCharts(userId);
+        setCharts(savedCharts);
+        setError(null);
+      } catch (err) {
+        console.error('Error loading birth charts:', err);
+        setError('Failed to load saved charts. Please try again later.');
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    const formData = new FormData(e.currentTarget);
-    const birthDate = formData.get('birthDate') as string;
-    const birthTime = formData.get('birthTime') as string;
-    const birthPlace = formData.get('birthPlace') as string;
+    loadCharts();
+  }, [userId]);
 
-    if (!birthDate || !birthTime || !birthPlace) {
-      setError('Please fill out all fields');
-      setIsLoading(false);
+  // Handle chart deletion
+  const handleDeleteChart = async (chartId: number) => {
+    if (!confirm('Are you sure you want to delete this chart?')) {
       return;
     }
 
     try {
-      const result = await calculateBirthChartWithSwissEph({
-        birthDate,
-        birthTime,
-        birthPlace
-      });
+      setDeleteStatus({ id: chartId, status: 'pending' });
+      const result = await deleteBirthChart(chartId);
       
-      if (result.error) {
-        setError(result.error);
+      if (result.success) {
+        setDeleteStatus({ id: chartId, status: 'success' });
+        // Remove the chart from the list
+        setCharts(charts.filter(chart => chart.id !== chartId));
       } else {
-        setChartData(result.data);
+        setDeleteStatus({ id: chartId, status: 'error' });
+        setError(result.error || 'Failed to delete chart');
       }
-    } catch (err: any) {
-      const errorMessage = err.message || 'An unexpected error occurred. Please try again.';
-      setError(`Error: ${errorMessage}`);
-      console.error('Error calculating birth chart:', err);
-    } finally {
-      setIsLoading(false);
+    } catch (err) {
+      console.error('Error deleting chart:', err);
+      setDeleteStatus({ id: chartId, status: 'error' });
+      setError('An unexpected error occurred while deleting the chart');
     }
   };
 
+  // Format date for display
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return new Intl.DateTimeFormat('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(date);
+  };
+
+  if (loading) {
+    return (
+      <Card className="p-6 text-center">
+        <p className="text-gray-400">Loading saved charts...</p>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card className="p-6 text-center bg-red-900/20 border-red-700">
+        <p className="text-red-300">{error}</p>
+      </Card>
+    );
+  }
+
+  if (charts.length === 0) {
+    return (
+      <Card className="p-6 text-center">
+        <p className="text-gray-400">No saved charts found. Create and save a birth chart to see it here.</p>
+      </Card>
+    );
+  }
+
   return (
-    <Card className="w-full max-w-md mx-auto bg-gradient-to-br from-gray-900 to-black border-gray-700 shadow-lg">
-      <CardHeader className="border-b border-gray-800">
-        <CardTitle className="text-2xl bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-600">
-          Birth Chart Calculator
-        </CardTitle>
-        <CardDescription className="text-gray-300">
-          Calculate your birth chart using Swiss Ephemeris for accurate planetary positions
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="pt-6">
-        <form onSubmit={handleSubmit} className="space-y-5">
-          {error && (
-            <div className="p-3 bg-red-900/50 border border-red-600 rounded-md text-white">
-              <p className="font-medium mb-1">Error</p>
-              <p className="text-sm">{error}</p>
-              {error.includes('Swiss Ephemeris') && (
-                <p className="text-xs mt-2 text-gray-300">
-                  The Swiss Ephemeris calculation engine encountered an error. This might be due to missing libraries or configuration issues.
-                </p>
+    <div className="space-y-4">
+      <h3 className="text-xl font-semibold">Your Saved Charts</h3>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {charts.map(chart => (
+          <Card key={chart.id} className="p-4 flex flex-col justify-between h-full">
+            <div>
+              <h4 className="font-bold text-lg mb-1">{chart.name}</h4>
+              <p className="text-sm text-gray-400 mb-2">{formatDate(chart.createdAt)}</p>
+              
+              <div className="space-y-1 text-sm">
+                <p><span className="text-gray-400">Birth Date:</span> {new Date(chart.birthDate).toLocaleDateString()}</p>
+                <p><span className="text-gray-400">Birth Time:</span> {chart.birthTime}</p>
+                <p><span className="text-gray-400">Birth Place:</span> {chart.birthPlace}</p>
+              </div>
+              
+              {chart.sun && (
+                <div className="mt-3 pt-3 border-t border-gray-700">
+                  <p className="text-sm"><span className="text-yellow-400">☉</span> Sun: {chart.sun}</p>
+                  {chart.moon && <p className="text-sm"><span className="text-blue-300">☽</span> Moon: {chart.moon}</p>}
+                  {chart.ascendant && <p className="text-sm"><span className="text-purple-400">Asc:</span> {chart.ascendant}</p>}
+                </div>
               )}
             </div>
-          )}
-          
-          <div className="space-y-2">
-            <Label htmlFor="birthDate" className="text-sm font-medium text-blue-300">
-              Birth Date
-            </Label>
-            <Input
-              id="birthDate"
-              name="birthDate"
-              type="date"
-              className="w-full p-3 border border-gray-700 rounded-md bg-black text-white shadow-inner focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
-              required
-            />
-          </div>
-          
-          <div className="space-y-2">
-            <Label htmlFor="birthTime" className="text-sm font-medium text-blue-300">
-              Birth Time
-            </Label>
-            <Input
-              id="birthTime"
-              name="birthTime"
-              type="time"
-              className="w-full p-3 border border-gray-700 rounded-md bg-black text-white shadow-inner focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
-              required
-            />
-            <p className="text-xs text-gray-400 mt-1">
-              For the most accurate chart, use the exact birth time from a birth certificate or hospital record
-            </p>
-          </div>
-          
-          <div className="space-y-2">
-            <Label htmlFor="birthPlace" className="text-sm font-medium text-blue-300">
-              Birth Place
-            </Label>
-            <Input
-              id="birthPlace"
-              name="birthPlace"
-              className="w-full p-3 border border-gray-700 rounded-md bg-black text-white shadow-inner focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
-              placeholder="City, State/Province, Country"
-              required
-            />
-            <p className="text-xs text-gray-400 mt-1">
-              Enter a city name like "Miami" or "Miami, Florida" - try to use major cities for better accuracy
-            </p>
-          </div>
-
-          <Button 
-            type="submit" 
-            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 transition-all py-2.5 h-auto text-lg"
-            disabled={isLoading}
-          >
-            {isLoading ? "Calculating..." : "Calculate Birth Chart"}
-          </Button>
-        </form>
-
-        {chartData && (
-          <div className="mt-6 bg-gray-900 p-4 rounded-lg border border-gray-800">
-            <h3 className="text-lg font-medium mb-3 text-blue-400">Planetary Positions</h3>
             
-            {chartData.calculationMethod && (
-              <div className="mb-3 text-xs bg-blue-900/30 p-2 rounded border border-blue-800">
-                <span className="font-medium">Calculation Method:</span> {chartData.calculationMethod}
-              </div>
-            )}
-            
-            <div className="space-y-2 text-sm">
-              {Object.entries(chartData.planets).map(([planet, data]: [string, any]) => (
-                <div key={planet} className="flex justify-between items-center border-b border-gray-800 border-opacity-50 pb-2">
-                  <span className="capitalize">{planet}:</span>
-                  <span className="font-medium text-gray-300">{data.name} {data.degree.toFixed(2)}°</span>
-                </div>
-              ))}
-            </div>
-            
-            <div className="mt-4 text-center">
-              <Button 
-                className="bg-gradient-to-r from-blue-600 to-purple-600"
-                onClick={() => window.location.href = `/birth-chart/calculator-result?data=${encodeURIComponent(JSON.stringify(chartData))}`}
+            <div className="flex gap-2 mt-4 pt-3 border-t border-gray-700">
+              {onSelectChart && (
+                <Button 
+                  onClick={() => onSelectChart(chart.id)} 
+                  variant="outline" 
+                  size="sm" 
+                  className="flex-1"
+                >
+                  View
+                </Button>
+              )}
+              
+              <Button
+                onClick={() => handleDeleteChart(chart.id)}
+                variant="destructive"
+                size="sm"
+                className="flex-1"
+                disabled={deleteStatus?.id === chart.id && deleteStatus.status === 'pending'}
               >
-                View Full Chart
+                {deleteStatus?.id === chart.id && deleteStatus.status === 'pending' ? 'Deleting...' : 'Delete'}
               </Button>
             </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+          </Card>
+        ))}
+      </div>
+    </div>
   );
 }

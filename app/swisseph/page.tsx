@@ -1,13 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { querySwissEph } from '@/actions'
-import { ZodiacWheel, type ChartData } from '@/components/ui/zodiacwheel'
+import { querySwissEph, saveBirthChart, getBirthChartById } from '@/actions'
+import { ZodiacWheel, type ChartData, exportChartAsImage } from '@/components/ui/zodiacwheel'
+import { SavedBirthCharts } from '@/components/ui/birth-chart-calculator'
 
 // Helper function to parse Swiss Ephemeris output into chart data
 function parseSwissEphOutput(output: string): ChartData {
@@ -306,6 +307,10 @@ export default function SwissEphPage() {
   const [loading, setLoading] = useState(false)
   const [chartData, setChartData] = useState<ChartData | null>(null)
   const [showChart, setShowChart] = useState(false)
+  const [savingChart, setSavingChart] = useState(false)
+  const [saveResult, setSaveResult] = useState<{ success: boolean; error?: string; chartId?: number } | null>(null)
+  const [selectedChartId, setSelectedChartId] = useState<number | null>(null)
+  const [loadingStoredChart, setLoadingStoredChart] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -330,6 +335,7 @@ export default function SwissEphPage() {
           parsed.date = date
           parsed.time = time
           parsed.location = location
+          parsed.title = `Birth Chart - ${date}`
           console.log("Parsed chart data:", parsed)
           setChartData(parsed)
         } catch (error) {
@@ -345,7 +351,8 @@ export default function SwissEphPage() {
             ascendant: { name: 'Aries', symbol: '♈', longitude: 0, degree: 0 },
             date: date || "Example Date",
             time: time || "Example Time",
-            location: location || "Example Location"
+            location: location || "Example Location",
+            title: `Birth Chart - ${date || "Example"}`
           }
           
           // Fill in default houses
@@ -373,62 +380,155 @@ export default function SwissEphPage() {
   
   const handleShowChart = () => {
     setShowChart(true)
+    setSaveResult(null)
+  }
+  
+  // Handler for saving the chart
+  const handleSaveChart = async (updatedChartData: ChartData) => {
+    try {
+      setSavingChart(true)
+      setSaveResult(null)
+      
+      // Call the saveBirthChart server action
+      const result = await saveBirthChart(updatedChartData)
+      
+      // Update state with the result
+      setSaveResult(result)
+      
+      // Update the chart data with the saved title
+      if (result.success && updatedChartData.title) {
+        setChartData(prevData => {
+          if (!prevData) return null;
+          return {
+            ...prevData,
+            title: updatedChartData.title,
+            id: result.chartId
+          };
+        });
+      }
+    } catch (error) {
+      console.error("Error saving chart:", error);
+      setSaveResult({
+        success: false,
+        error: "An unexpected error occurred while saving the chart."
+      });
+    } finally {
+      setSavingChart(false)
+    }
+  }
+  
+  // Handler for updating the chart title
+  const handleTitleChange = (title: string) => {
+    setChartData(prevData => {
+      if (!prevData) return null;
+      return {
+        ...prevData,
+        title
+      };
+    });
+  }
+  
+  // Handler for selecting a saved chart
+  const handleSelectChart = async (chartId: number) => {
+    try {
+      setLoadingStoredChart(true);
+      setSelectedChartId(chartId);
+      
+      // Fetch the saved chart from the database
+      const savedChart = await getBirthChartById(chartId);
+      
+      if (!savedChart) {
+        console.error('Chart not found');
+        return;
+      }
+      
+      // Convert the stored chart to our ChartData format
+      // This is a simplified conversion - you'd need to map the database schema to ChartData
+      const convertedChart: ChartData = {
+        title: savedChart.name,
+        date: new Date(savedChart.birthDate).toLocaleDateString(),
+        time: savedChart.birthTime,
+        location: savedChart.birthPlace,
+        planets: {}, // We'd need to parse the planet positions from strings
+        houses: savedChart.houses as any || {},
+        aspects: savedChart.aspects as any || [],
+        ascendant: { name: 'Unknown', symbol: '', longitude: 0, degree: 0 },
+        id: savedChart.id,
+      };
+      
+      // Set chart data and show the chart
+      setChartData(convertedChart);
+      setShowChart(true);
+      
+    } catch (error) {
+      console.error('Error loading saved chart:', error);
+    } finally {
+      setLoadingStoredChart(false);
+    }
   }
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-6">Swiss Ephemeris Query Tool</h1>
+      <h1 className="text-3xl font-bold mb-6">Birth Chart Calculator</h1>
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <Card className="p-6">
-          <form onSubmit={handleSubmit}>
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="date">Date (DD.MM.YYYY)</Label>
-                <Input 
-                  id="date" 
-                  placeholder="08.10.1995"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  required
-                />
-                <p className="text-xs text-gray-500 mt-1">Format: 08.10.1995 (Day.Month.Year)</p>
+        <div className="space-y-8">
+          <Card className="p-6">
+            <h2 className="text-xl font-semibold mb-4">Calculate New Chart</h2>
+            <form onSubmit={handleSubmit}>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="date">Date (DD.MM.YYYY)</Label>
+                  <Input 
+                    id="date" 
+                    placeholder="08.10.1995"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Format: 08.10.1995 (Day.Month.Year)</p>
+                </div>
+                
+                <div>
+                  <Label htmlFor="time">Time (HH:MM)</Label>
+                  <Input 
+                    id="time" 
+                    placeholder="19:56"
+                    value={time}
+                    onChange={(e) => setTime(e.target.value)}
+                    required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Format: 19:56 (24-hour format, local time for the location)</p>
+                </div>
+                
+                <div>
+                  <Label htmlFor="location">Birth Location</Label>
+                  <Input 
+                    id="location" 
+                    placeholder="New York, NY, USA"
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                    required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Enter city name, optionally with state/country (e.g., "New York, NY" or "Paris, France")</p>
+                </div>
+                
+                <Button 
+                  type="submit" 
+                  className="w-full"
+                  disabled={loading}
+                >
+                  {loading ? 'Processing...' : 'Calculate Birth Chart'}
+                </Button>
               </div>
-              
-              <div>
-                <Label htmlFor="time">Time (HH:MM)</Label>
-                <Input 
-                  id="time" 
-                  placeholder="19:56"
-                  value={time}
-                  onChange={(e) => setTime(e.target.value)}
-                  required
-                />
-                <p className="text-xs text-gray-500 mt-1">Format: 19:56 (24-hour format, local time for the location)</p>
-              </div>
-              
-              <div>
-                <Label htmlFor="location">Birth Location</Label>
-                <Input 
-                  id="location" 
-                  placeholder="New York, NY, USA"
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  required
-                />
-                <p className="text-xs text-gray-500 mt-1">Enter city name, optionally with state/country (e.g., "New York, NY" or "Paris, France")</p>
-              </div>
-              
-              <Button 
-                type="submit" 
-                className="w-full"
-                disabled={loading}
-              >
-                {loading ? 'Processing...' : 'Run Query'}
-              </Button>
-            </div>
-          </form>
-        </Card>
+            </form>
+          </Card>
+          
+          {/* Saved Charts Section */}
+          <div className="mt-8">
+            <SavedBirthCharts onSelectChart={handleSelectChart} />
+          </div>
+        </div>
         
         <Card className="p-6">
           <h2 className="text-xl font-semibold mb-4">Results</h2>
@@ -479,6 +579,17 @@ export default function SwissEphPage() {
               {showChart && (
                 <div className="mt-6 rounded-lg overflow-hidden">
                   <h2 className="text-xl font-semibold mb-2">Natal Chart</h2>
+                  
+                  {saveResult && (
+                    <div className={`mb-4 p-3 rounded ${saveResult.success ? 'bg-green-900/50 border border-green-600' : 'bg-red-900/50 border border-red-600'}`}>
+                      {saveResult.success ? (
+                        <p className="text-green-200">Chart saved successfully! Chart ID: {saveResult.chartId}</p>
+                      ) : (
+                        <p className="text-red-200">{saveResult.error || "Failed to save chart."}</p>
+                      )}
+                    </div>
+                  )}
+                  
                   <div className="flex justify-center">
                     <ZodiacWheel 
                       chartData={chartData || {
@@ -504,10 +615,13 @@ export default function SwissEphPage() {
                         ascendant: { name: 'Aries', symbol: '♈', longitude: 0, degree: 0 },
                         date: date,
                         time: time,
-                        location: location
+                        location: location,
+                        title: `Birth Chart - ${date}`,
                       } as ChartData} 
                       width={600} 
-                      height={600} 
+                      height={600}
+                      onSaveChart={handleSaveChart}
+                      onTitleChange={handleTitleChange}
                     />
                   </div>
                 </div>

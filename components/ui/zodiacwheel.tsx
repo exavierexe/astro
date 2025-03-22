@@ -78,17 +78,58 @@ export type ChartData = {
   date?: string;
   time?: string;
   location?: string;
+  title?: string;
+  id?: number;
+  userId?: number;
 };
 
 type ZodiacWheelProps = {
   chartData: ChartData;
   width?: number;
   height?: number;
+  onSaveChart?: (chartData: ChartData) => void;
+  onTitleChange?: (title: string) => void;
 };
 
-export function ZodiacWheel({ chartData, width = 600, height = 600 }: ZodiacWheelProps) {
+// Helper function to export chart as PNG image
+export function exportChartAsImage(
+  canvasRef: React.RefObject<HTMLCanvasElement>,
+  chartTitle: string = 'Birth Chart'
+): void {
+  if (!canvasRef.current) return;
+  
+  try {
+    // Create a temporary anchor element
+    const link = document.createElement('a');
+    link.download = `${chartTitle.replace(/\s+/g, '-').toLowerCase()}.png`;
+    link.href = canvasRef.current.toDataURL('image/png');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  } catch (error) {
+    console.error('Error exporting chart as image:', error);
+  }
+}
+
+export function ZodiacWheel({ 
+  chartData, 
+  width = 600, 
+  height = 600,
+  onSaveChart,
+  onTitleChange
+}: ZodiacWheelProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [tooltipInfo, setTooltipInfo] = useState<{ x: number; y: number; text: string } | null>(null);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [titleValue, setTitleValue] = useState('');
+  
+  // Default title if not provided
+  const chartTitle = chartData.title || 'Birth Chart';
+  
+  // Initialize title value when chart data changes
+  useEffect(() => {
+    setTitleValue(chartTitle);
+  }, [chartTitle]);
   
   // Calculate center and dimensions for the South Indian square chart
   const chartSize = Math.min(width, height) * 0.9; // Square chart size
@@ -347,21 +388,14 @@ export function ZodiacWheel({ chartData, width = 600, height = 600 }: ZodiacWhee
     ctx.fillRect(centerX, centerY, centerWidth, centerHeight);
     
     // Add inner border for aesthetics
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.lineWidth = 0;
-    ctx.strokeRect(
-      centerX + 5, 
-      centerY + 5, 
-      centerWidth - 10, 
-      centerHeight - 10
-    );
+   
     
     // Draw chart title
     ctx.font = 'bold 16px Arial';
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    ctx.fillText('Birth Chart', centerX + centerWidth / 2, centerY + 10);
+    ctx.fillText(chartTitle, centerX + centerWidth / 2, centerY + 10);
     
     // Draw date, time, location if available - with improved visibility
     let yOffset = 35;
@@ -545,6 +579,41 @@ export function ZodiacWheel({ chartData, width = 600, height = 600 }: ZodiacWhee
     setTooltipInfo(null);
   };
   
+  // Handle title edit
+  const handleTitleEdit = () => {
+    setIsEditingTitle(true);
+  };
+
+  // Handle title save
+  const handleTitleSave = () => {
+    setIsEditingTitle(false);
+    if (onTitleChange) {
+      onTitleChange(titleValue);
+    }
+  };
+
+  // Handle title input change
+  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setTitleValue(e.target.value);
+  };
+
+  // Handle export chart as image
+  const handleExportChart = () => {
+    exportChartAsImage(canvasRef, chartTitle);
+  };
+
+  // Handle saving chart
+  const handleSaveChart = () => {
+    if (onSaveChart) {
+      // Create a new chart data object with the updated title
+      const updatedChartData = {
+        ...chartData,
+        title: titleValue || chartTitle
+      };
+      onSaveChart(updatedChartData);
+    }
+  };
+
   return (
     <div className="relative">
       <canvas 
@@ -568,6 +637,53 @@ export function ZodiacWheel({ chartData, width = 600, height = 600 }: ZodiacWhee
           {tooltipInfo.text}
         </div>
       )}
+
+      <div className="mt-4 flex flex-col gap-2">
+        <div className="flex items-center gap-2">
+          {isEditingTitle ? (
+            <div className="flex-1 flex gap-2">
+              <input
+                type="text"
+                value={titleValue}
+                onChange={handleTitleChange}
+                className="flex-1 p-2 rounded border border-gray-500 bg-gray-800 text-white"
+                placeholder="Chart Title"
+              />
+              <button 
+                onClick={handleTitleSave}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded"
+              >
+                Save Title
+              </button>
+            </div>
+          ) : (
+            <button 
+              onClick={handleTitleEdit}
+              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded"
+            >
+              Edit Title
+            </button>
+          )}
+        </div>
+        
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={handleExportChart}
+            className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded"
+          >
+            Export as PNG
+          </button>
+          
+          {onSaveChart && (
+            <button 
+              onClick={handleSaveChart}
+              className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded"
+            >
+              Save Chart
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -1459,6 +1459,122 @@ export async function determineTimeZone(longitude: number, latitude: number): Pr
   }
 }
 
+// Save a birth chart
+export const saveBirthChart = async (chartData: any) => {
+  try {
+    if (!chartData) {
+      return {
+        success: false,
+        error: "Missing chart data."
+      };
+    }
+    
+    // Format the birth date from the chart data
+    let birthDate = new Date();
+    
+    // If we have a date string, try to parse it
+    if (chartData.date) {
+      try {
+        // Handle different date formats
+        // DD.MM.YYYY format (like 08.10.1995)
+        if (chartData.date.includes('.')) {
+          const [day, month, year] = chartData.date.split('.').map(Number);
+          birthDate = new Date(year, month - 1, day);
+        } 
+        // YYYY-MM-DD format
+        else if (chartData.date.includes('-')) {
+          birthDate = new Date(chartData.date);
+        }
+      } catch (error) {
+        console.error("Error parsing birth date:", error);
+        // If parsing fails, keep the default date
+      }
+    }
+    
+    // Extract planet positions
+    const { 
+      sun, moon, mercury, venus, mars, jupiter, saturn, uranus, neptune, pluto 
+    } = chartData.planets || {};
+    
+    // Create the birth chart in the database
+    const chart = await prisma.birthChart.create({
+      data: {
+        name: chartData.title || 'Birth Chart',
+        birthDate,
+        birthTime: chartData.time || '',
+        birthPlace: chartData.location || '',
+        ascendant: chartData.ascendant?.name 
+          ? `${chartData.ascendant.name} ${chartData.ascendant.degree.toFixed(1)}°`
+          : null,
+        sun: sun?.name ? `${sun.name} ${sun.degree.toFixed(1)}°` : null,
+        moon: moon?.name ? `${moon.name} ${moon.degree.toFixed(1)}°` : null,
+        mercury: mercury?.name ? `${mercury.name} ${mercury.degree.toFixed(1)}°` : null,
+        venus: venus?.name ? `${venus.name} ${venus.degree.toFixed(1)}°` : null,
+        mars: mars?.name ? `${mars.name} ${mars.degree.toFixed(1)}°` : null,
+        jupiter: jupiter?.name ? `${jupiter.name} ${jupiter.degree.toFixed(1)}°` : null,
+        saturn: saturn?.name ? `${saturn.name} ${saturn.degree.toFixed(1)}°` : null,
+        uranus: uranus?.name ? `${uranus.name} ${uranus.degree.toFixed(1)}°` : null,
+        neptune: neptune?.name ? `${neptune.name} ${neptune.degree.toFixed(1)}°` : null,
+        pluto: pluto?.name ? `${pluto.name} ${pluto.degree.toFixed(1)}°` : null,
+        houses: chartData.houses || {},
+        aspects: chartData.aspects || [],
+        userId: chartData.userId || null,
+      }
+    });
+    
+    revalidatePath('/swisseph');
+    return { success: true, chartId: chart.id };
+  } catch (error) {
+    console.error("Error saving birth chart:", error);
+    return { 
+      success: false, 
+      error: "Failed to save birth chart. Please try again."
+    };
+  }
+};
+
+// Get all birth charts for a user
+export const getBirthCharts = async (userId?: number) => {
+  try {
+    const where = userId ? { userId } : {};
+    const charts = await prisma.birthChart.findMany({
+      where,
+      orderBy: { createdAt: 'desc' }
+    });
+    return charts;
+  } catch (error) {
+    console.error("Error fetching birth charts:", error);
+    return [];
+  }
+};
+
+// Get a specific birth chart by ID
+export const getBirthChartById = async (chartId: number) => {
+  try {
+    const chart = await prisma.birthChart.findUnique({
+      where: { id: chartId }
+    });
+    return chart;
+  } catch (error) {
+    console.error("Error fetching birth chart:", error);
+    return null;
+  }
+};
+
+// Delete a birth chart
+export const deleteBirthChart = async (chartId: number) => {
+  try {
+    await prisma.birthChart.delete({
+      where: { id: chartId }
+    });
+    revalidatePath('/swisseph');
+    return { success: true };
+  } catch (error) {
+    console.error("Error deleting birth chart:", error);
+    return { success: false, error: "Failed to delete birth chart." };
+  }
+};
+
 function parseSwissEphOutput(output: string, location: any) {
   // Initialize parsed data
   const parsedData: Record<string, any> = {
