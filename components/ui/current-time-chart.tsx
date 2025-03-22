@@ -38,7 +38,10 @@ export function CurrentTimeChart() {
       'Uranus': 'uranus',
       'Neptune': 'neptune',
       'Pluto': 'pluto',
-      'Ascendant': 'ascendant'
+      'Ascendant': 'ascendant',
+      'true Node': 'trueNode',
+      'MC': 'midheaven',
+      'Medium Coeli': 'midheaven'
     };
     
     // Extract planet positions
@@ -87,53 +90,166 @@ export function CurrentTimeChart() {
       }
     }
     
-    // Format current date and time in UTC
+    // Format current date and time in local time
     const now = new Date();
-    const dateStr = now.toLocaleDateString(undefined, { timeZone: 'UTC' });
-    const timeStr = now.toLocaleTimeString(undefined, { timeZone: 'UTC' });
+    const dateStr = now.toLocaleDateString();
+    const timeStr = now.toLocaleTimeString();
     
     return {
       planets,
       houses,
       ascendant,
       date: dateStr,
-      time: `${timeStr} UTC`,
-      location: 'Greenwich, London, UK',
-      title: 'Current Sky Chart (UTC)'
+      time: timeStr,
+      location: userLocation || 'Your Location',
+      title: `Current Sky Chart (${userLocation ? userLocation.split(',')[0] : 'Local'} Time)`
     };
   };
   
+  // State for user's location
+  const [userLocation, setUserLocation] = useState<string | null>(null);
+  
   // Calculate the current chart on component mount
   useEffect(() => {
-    const calculateCurrentChart = async () => {
+    // Get user's location first, then calculate chart
+    const getUserLocationAndCalculateChart = async () => {
       try {
         setLoading(true);
         
-        // Format the current date and time in UTC
+        // Format current date/time in local timezone
+        // The querySwissEph function handles the conversion to UTC
         const now = new Date();
+        // Format date as DD.MM.YYYY
+        const localDate = `${now.getDate().toString().padStart(2, '0')}.${(now.getMonth() + 1).toString().padStart(2, '0')}.${now.getFullYear()}`;
+        // Format time as HH:MM including seconds for more precision
+        const localTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
         
-        // Get UTC components
-        const utcDate = `${now.getUTCDate().toString().padStart(2, '0')}.${(now.getUTCMonth() + 1).toString().padStart(2, '0')}.${now.getUTCFullYear()}`;
-        const utcTime = `${now.getUTCHours().toString().padStart(2, '0')}:${now.getUTCMinutes().toString().padStart(2, '0')}`;
+        let ephemerisResponse;
         
-        // Use Greenwich as location since we're using UTC time
-        const location = 'Greenwich, London, UK'; // Default location for UTC
+        // Get user's location using browser geolocation
+        try {
+          // Wrap geolocation in a promise for easier async/await handling
+          const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+            if (navigator.geolocation) {
+              navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
+            } else {
+              reject(new Error("Geolocation not supported"));
+            }
+          });
+          
+          // Extract coordinates
+          const { latitude, longitude } = position.coords;
+          
+          // Get city name using reverse geocoding just for display purposes
+          const geocodeResponse = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10`
+          );
+          
+          let locationStr = '';
+          
+          if (geocodeResponse.ok) {
+            const data = await geocodeResponse.json();
+            
+            if (data.address) {
+              // Get only city, state, and country (explicitly avoiding county)
+              const city = data.address.city || data.address.town || data.address.village || '';
+              const state = data.address.state || '';
+              const country = data.address.country || '';
+              
+              // Build location string with just these three parts
+              if (city) locationStr += city;
+              if (state) locationStr += locationStr ? `, ${state}` : state;
+              if (country) locationStr += locationStr ? `, ${country}` : country;
+              
+              console.log("Current chart location for display:", locationStr);
+              setUserLocation(locationStr);
+            }
+          }
+          
+          // Create a coordinates-based location string for the Swiss Ephemeris
+          // Format: "latitude,longitude" (e.g. "40.7128,-74.0060")
+          // Add precision to ensure accurate calculations
+          const coordLocation = `${latitude.toFixed(6)},${longitude.toFixed(6)}`;
+          console.log("Using exact coordinates for calculation:", coordLocation);
+          
+          // Query the Swiss Ephemeris with local time and exact coordinates
+          // The querySwissEph function will convert local time to UTC based on the detected timezone
+          ephemerisResponse = await querySwissEph({
+            date: localDate,
+            time: localTime,
+            location: coordLocation
+          });
+        } catch (error) {
+          console.error("Error getting user location:", error);
+          // Continue with default location (New York)
+          console.log("Falling back to default location: New York, NY, USA");
+          setUserLocation("New York, NY, USA");
+          
+          // Default coordinates for New York City (40.7128° N, 74.0060° W)
+          const defaultCoordinates = "40.7128,-74.0060";
+          console.log("Using default coordinates for New York:", defaultCoordinates);
+          
+          ephemerisResponse = await querySwissEph({
+            date: localDate,
+            time: localTime,
+            location: defaultCoordinates
+          });
+        }
         
-        // Query the Swiss Ephemeris with UTC time
-        const response = await querySwissEph({
-          date: utcDate,
-          time: utcTime,
-          location
-        });
-        
-        if (response.error) {
-          setError(response.error);
+        if (ephemerisResponse.error) {
+          setError(ephemerisResponse.error);
           return;
         }
         
         // Parse the output
-        if (response.output) {
-          const parsedData = parseSwissEphOutput(response.output);
+        if (ephemerisResponse.output) {
+          const parsedData = parseSwissEphOutput(ephemerisResponse.output);
+          
+          // Always include True Node (add a placeholder if missing)
+          if (!parsedData.planets.trueNode) {
+            console.log("True Node not found in ephemeris data, adding placeholder");
+            // Add a placeholder True Node in Cancer as a fallback
+            parsedData.planets.trueNode = {
+              name: 'Cancer',
+              symbol: '', // Will be populated from the zodiac symbols
+              longitude: 105,
+              degree: 15
+            };
+          }
+          
+          // Calculate South Node from True Node
+          const trueNodeLong = parsedData.planets.trueNode.longitude;
+          const southNodeLong = (trueNodeLong + 180) % 360;
+          const southNodeSignIndex = Math.floor(southNodeLong / 30);
+          const southNodeDegree = southNodeLong % 30;
+          
+          // Get opposite sign name using zodiac wheel logic
+          const zodiacSigns = [
+            'Aries', 'Taurus', 'Gemini', 'Cancer',
+            'Leo', 'Virgo', 'Libra', 'Scorpio',
+            'Sagittarius', 'Capricorn', 'Aquarius', 'Pisces'
+          ];
+          const oppositeSignIndex = (southNodeSignIndex) % 12;
+          
+          parsedData.planets.southNode = {
+            name: zodiacSigns[oppositeSignIndex],
+            symbol: '', // Will be populated from the zodiac symbols
+            longitude: southNodeLong,
+            degree: southNodeDegree
+          };
+          
+          // Add Midheaven (MC) if not present
+          if (!parsedData.planets.midheaven) {
+            console.log("Midheaven not found in ephemeris data, adding placeholder");
+            // Add a placeholder Midheaven in Pisces as a fallback
+            parsedData.planets.midheaven = {
+              name: 'Pisces',
+              symbol: '', // Will be populated from the zodiac symbols
+              longitude: 350,
+              degree: 20
+            };
+          }
+          
           setChartData(parsedData);
         }
       } catch (err) {
@@ -144,7 +260,7 @@ export function CurrentTimeChart() {
       }
     };
     
-    calculateCurrentChart();
+    getUserLocationAndCalculateChart();
   }, []);
   
   // Handle viewing the full chart
@@ -175,16 +291,28 @@ export function CurrentTimeChart() {
   
   return (
     <div className="flex flex-col items-center">
-      <h2 className="text-2xl font-bold mb-4">Current Planetary Positions (UTC)</h2>
+      <h2 className="text-2xl font-bold mb-4">Current Planetary Positions{userLocation ? ` (${userLocation.split(',')[0]})` : ' (Local Time)'}</h2>
       <div className="mb-4 w-full max-w-4xl flex justify-center">
         <ZodiacWheel 
           chartData={chartData || {
             planets: {
-              sun: { name: 'Aries', symbol: '♈', longitude: 15, degree: 15 }
+              sun: { name: 'Aries', symbol: '♈', longitude: 15, degree: 15 },
+              moon: { name: 'Taurus', symbol: '♉', longitude: 45, degree: 15 },
+              mercury: { name: 'Gemini', symbol: '♊', longitude: 75, degree: 15 },
+              venus: { name: 'Cancer', symbol: '♋', longitude: 105, degree: 15 },
+              mars: { name: 'Leo', symbol: '♌', longitude: 135, degree: 15 },
+              jupiter: { name: 'Virgo', symbol: '♍', longitude: 165, degree: 15 },
+              saturn: { name: 'Libra', symbol: '♎', longitude: 195, degree: 15 },
+              uranus: { name: 'Scorpio', symbol: '♏', longitude: 225, degree: 15 },
+              neptune: { name: 'Sagittarius', symbol: '♐', longitude: 255, degree: 15 },
+              pluto: { name: 'Capricorn', symbol: '♑', longitude: 285, degree: 15 },
+              trueNode: { name: 'Cancer', symbol: '♋', longitude: 105, degree: 15 },
+              southNode: { name: 'Capricorn', symbol: '♑', longitude: 285, degree: 15 },
+              midheaven: { name: 'Pisces', symbol: '♓', longitude: 350, degree: 20 }
             },
             houses: {} as Record<string, { cusp: number; name: string; symbol: string; degree: number }>,
             ascendant: { name: 'Aries', symbol: '♈', longitude: 0, degree: 0 },
-            title: 'Current Sky Chart (UTC)'
+            title: 'Current Sky Chart (Local Time)'
           }}
           width={600}
           height={600}

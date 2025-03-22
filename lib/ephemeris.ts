@@ -632,7 +632,7 @@ function findTimeZone(latitude: number, longitude: number, countryCode: string):
   }
 }
 
-export async function geocodeLocation(locationName: string): Promise<{
+export async function geocodeLocation(locationInput: string): Promise<{
   latitude: number;
   longitude: number;
   formattedAddress: string;
@@ -643,19 +643,48 @@ export async function geocodeLocation(locationName: string): Promise<{
   };
 }> {
   try {
-    console.log(`Geocoding location: "${locationName}"`);
+    console.log(`Geocoding location: "${locationInput}"`);
     
-    if (!locationName || locationName.trim() === '') {
+    if (!locationInput || locationInput.trim() === '') {
       return {
         latitude: 0,
         longitude: 0,
-        formattedAddress: 'Please enter a location name'
+        formattedAddress: 'Please enter a location name or coordinates'
+      };
+    }
+    
+    // Check if input is coordinates in format "latitude,longitude"
+    const coordsMatch = locationInput.match(/^\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*$/);
+    if (coordsMatch) {
+      const latitude = parseFloat(coordsMatch[1]);
+      const longitude = parseFloat(coordsMatch[2]);
+      
+      // Validate coordinate ranges
+      if (isNaN(latitude) || isNaN(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+        console.error(`Invalid coordinates: ${locationInput}`);
+        return {
+          latitude: 0,
+          longitude: 0,
+          formattedAddress: 'Invalid coordinates. Latitude must be between -90 and 90, longitude between -180 and 180.'
+        };
+      }
+      
+      console.log(`Using direct coordinates: lat ${latitude}, lon ${longitude}`);
+      
+      // Find timezone for these coordinates
+      const timeZone = findTimeZone(latitude, longitude);
+      
+      return {
+        latitude,
+        longitude,
+        formattedAddress: `Coordinates: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
+        timeZone
       };
     }
     
     // Get city data from CSV
     const cities = loadCitiesData();
-    const searchTerms = locationName.toLowerCase().trim().split(',').map(part => part.trim());
+    const searchTerms = locationInput.toLowerCase().trim().split(',').map(part => part.trim());
     const cityName = searchTerms[0]; // First part is assumed to be the city name
     
     let matches: any[] = [];

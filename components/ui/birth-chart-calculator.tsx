@@ -118,6 +118,8 @@ export function SavedBirthCharts({ userId, onSelectChart }: SavedChartProps) {
                   <p className="text-sm"><span className="text-yellow-400">☉</span> Sun: {chart.sun}</p>
                   {chart.moon && <p className="text-sm"><span className="text-blue-300">☽</span> Moon: {chart.moon}</p>}
                   {chart.ascendant && <p className="text-sm"><span className="text-purple-400">Asc:</span> {chart.ascendant}</p>}
+                  {chart.midheaven && <p className="text-sm"><span className="text-yellow-200">MC:</span> {chart.midheaven}</p>}
+                  {chart.trueNode && <p className="text-sm"><span className="text-green-400">☊</span> North Node: {chart.trueNode}</p>}
                 </div>
               )}
             </div>

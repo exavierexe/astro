@@ -36,6 +36,7 @@ model BirthChart {
   birthTime   String
   birthPlace  String
   ascendant   String?
+  midheaven   String?  // Medium Coeli (MC)
   sun         String?
   moon        String?
   mercury     String?
@@ -46,6 +47,10 @@ model BirthChart {
   uranus      String?
   neptune     String?
   pluto       String?
+  trueNode    String?  // True North Node
+  meanNode    String?  // Mean North Node
+  chiron      String?  // Chiron
+  lilith      String?  // Black Moon Lilith
   houses      Json?
   aspects     Json?
   notes       String?

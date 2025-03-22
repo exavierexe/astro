@@ -76,8 +76,10 @@ function parseSwissEphOutput(output: string): ChartData {
     'Pallas': 'pallas',
     'Juno': 'juno',
     'Vesta': 'vesta',
-    'Ascendant': 'ascendant',
-    'MC': 'midheaven'             // Midheaven
+    'Ascendant': 'ascendant', 
+    'Asc': 'ascendant',            // Alternative name for Ascendant
+    'MC': 'midheaven',             // Midheaven
+    'Medium Coeli': 'midheaven'    // Full name for Midheaven
   };
   
   // Parse the output line by line
@@ -306,16 +308,95 @@ export default function SwissEphPage() {
   const searchParams = useSearchParams();
   const chartIdFromUrl = searchParams.get('chart');
   
-  // Get current date in DD.MM.YYYY format
+  // Get current date in the user's local time zone
   const currentDate = new Date();
+  
+  // Format date in DD.MM.YYYY format
   const formattedDate = `${currentDate.getDate().toString().padStart(2, '0')}.${(currentDate.getMonth() + 1).toString().padStart(2, '0')}.${currentDate.getFullYear()}`;
   
-  // Get current time in HH:MM format
+  // Get current time in HH:MM format in user's local time zone
   const formattedTime = `${currentDate.getHours().toString().padStart(2, '0')}:${currentDate.getMinutes().toString().padStart(2, '0')}`;
   
+  // Default location state
   const [date, setDate] = useState(formattedDate)
   const [time, setTime] = useState(formattedTime)
-  const [location, setLocation] = useState('New York, NY, USA') // Default to New York
+  const [location, setLocation] = useState('') // Will be determined by geolocation
+  const [locationLoading, setLocationLoading] = useState(true)
+  
+  // Get user's approximate location using geolocation API
+  useEffect(() => {
+    const getLocation = async () => {
+      try {
+        setLocationLoading(true);
+        
+        // Check if browser supports geolocation
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            async (position) => {
+              try {
+                // Get latitude and longitude
+                const { latitude, longitude } = position.coords;
+                
+                // Attempt to get city name using a reverse geocoding service
+                // Here we're using a simple approach that should work in most browsers
+                const response = await fetch(
+                  `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10`
+                );
+                
+                if (response.ok) {
+                  const data = await response.json();
+                  let locationStr = '';
+                  
+                  // Try to create a readable location string
+                  if (data.address) {
+                    // Get only city, state, and country (no county)
+                    const city = data.address.city || data.address.town || data.address.village || '';
+                    const state = data.address.state || '';
+                    const country = data.address.country || '';
+                    
+                    // Build location string with just these three parts
+                    if (city) locationStr += city;
+                    if (state) locationStr += locationStr ? `, ${state}` : state;
+                    if (country) locationStr += locationStr ? `, ${country}` : country;
+                    
+                    console.log("Detected location:", locationStr);
+                  }
+                  
+                  // Set the user's location, or default to "Your Location" if geocoding failed
+                  setLocation(locationStr || "Your Location");
+                } else {
+                  // Default location if the geocoding fails
+                  setLocation("Your Location");
+                }
+              } catch (error) {
+                console.error("Error getting location name:", error);
+                setLocation("Your Location");
+              } finally {
+                setLocationLoading(false);
+              }
+            },
+            (error) => {
+              console.error("Geolocation error:", error);
+              setLocation("New York, NY, USA"); // Default if geolocation fails
+              setLocationLoading(false);
+            },
+            { timeout: 5000 } // 5 second timeout
+          );
+        } else {
+          // Browser doesn't support geolocation
+          console.log("Geolocation not supported by browser");
+          setLocation("New York, NY, USA");
+          setLocationLoading(false);
+        }
+      } catch (error) {
+        console.error("Error in geolocation:", error);
+        setLocation("New York, NY, USA");
+        setLocationLoading(false);
+      }
+    };
+    
+    getLocation();
+  }, []);
   const [result, setResult] = useState<{ output: string; error?: string } | null>(null)
   const [loading, setLoading] = useState(false)
   const [chartData, setChartData] = useState<ChartData | null>(null)
@@ -345,6 +426,22 @@ export default function SwissEphPage() {
       if (response.output) {
         try {
           const parsed = parseSwissEphOutput(response.output)
+          
+          // Calculate South Node from True Node if available
+          if (parsed.planets.trueNode) {
+            const trueNodeLong = parsed.planets.trueNode.longitude;
+            const southNodeLong = (trueNodeLong + 180) % 360;
+            const southNodeSignIndex = Math.floor(southNodeLong / 30);
+            const southNodeDegree = southNodeLong % 30;
+            
+            parsed.planets.southNode = {
+              name: ZODIAC_SIGNS[southNodeSignIndex],
+              symbol: ZODIAC_SYMBOLS[southNodeSignIndex],
+              longitude: southNodeLong,
+              degree: southNodeDegree
+            };
+          }
+          
           // Add date, time, and location to the chart data
           parsed.date = date
           parsed.time = time
@@ -359,7 +456,10 @@ export default function SwissEphPage() {
             planets: {
               sun: { name: 'Aries', symbol: '♈', longitude: 15, degree: 15, isRetrograde: false },
               moon: { name: 'Taurus', symbol: '♉', longitude: 45, degree: 15, isRetrograde: false },
-              mercury: { name: 'Gemini', symbol: '♊ᴿ', longitude: 75, degree: 15, isRetrograde: true } // Mercury retrograde as example
+              mercury: { name: 'Gemini', symbol: '♊ᴿ', longitude: 75, degree: 15, isRetrograde: true }, // Mercury retrograde as example
+              trueNode: { name: 'Cancer', symbol: '♋', longitude: 105, degree: 15, isRetrograde: false },
+              southNode: { name: 'Capricorn', symbol: '♑', longitude: 285, degree: 15, isRetrograde: false }, // Opposite true node
+              midheaven: { name: 'Pisces', symbol: '♓', longitude: 350, degree: 20, isRetrograde: false }
             },
             houses: {} as Record<string, { cusp: number; name: string; symbol: string; degree: number }>,
             ascendant: { name: 'Aries', symbol: '♈', longitude: 0, degree: 0 },
@@ -535,6 +635,21 @@ export default function SwissEphPage() {
             id: chartToLoad.id,
           };
           
+          // Calculate South Node from True Node if available
+          if (convertedChart.planets.trueNode) {
+            const trueNodeLong = convertedChart.planets.trueNode.longitude;
+            const southNodeLong = (trueNodeLong + 180) % 360;
+            const southNodeSignIndex = Math.floor(southNodeLong / 30);
+            const southNodeDegree = southNodeLong % 30;
+            
+            convertedChart.planets.southNode = {
+              name: ZODIAC_SIGNS[southNodeSignIndex],
+              symbol: ZODIAC_SYMBOLS[southNodeSignIndex],
+              longitude: southNodeLong,
+              degree: southNodeDegree
+            };
+          }
+          
           // Set chart data and show the chart
           setChartData(convertedChart);
           setShowChart(true);
@@ -563,6 +678,7 @@ export default function SwissEphPage() {
     try {
       setLoadingStoredChart(true);
       setSelectedChartId(chartId);
+      setSaveResult(null); // Clear any previous save results
       
       // Fetch the saved chart from the database
       const savedChart = await getBirthChartById(chartId);
@@ -597,9 +713,12 @@ export default function SwissEphPage() {
         // Calculate absolute longitude (0-360)
         const longitude = signIndex * 30 + degree;
         
+        // Create proper zodiac symbol
+        const symbol = ZODIAC_SYMBOLS[signIndex];
+        
         return {
           name: ZODIAC_SIGNS[signIndex],
-          symbol: ZODIAC_SYMBOLS[signIndex],
+          symbol,
           longitude,
           degree
         };
@@ -617,10 +736,33 @@ export default function SwissEphPage() {
       if (savedChart.neptune) planets.neptune = parsePosition(savedChart.neptune);
       if (savedChart.pluto) planets.pluto = parsePosition(savedChart.pluto);
       
+      // Add true node (North Node)
+      const trueNodePos = parsePosition(savedChart.trueNode);
+      if (trueNodePos) {
+        planets.trueNode = trueNodePos;
+        
+        // Calculate South Node (always 180° opposite to True Node)
+        const southNodeLongitude = (trueNodePos.longitude + 180) % 360;
+        const southNodeSignIndex = Math.floor(southNodeLongitude / 30);
+        const southNodeDegree = southNodeLongitude % 30;
+        
+        planets.southNode = {
+          name: ZODIAC_SIGNS[southNodeSignIndex],
+          symbol: ZODIAC_SYMBOLS[southNodeSignIndex],
+          longitude: southNodeLongitude,
+          degree: southNodeDegree
+        };
+      }
+      
       // Parse ascendant
       const ascendant = parsePosition(savedChart.ascendant) || { 
-        name: 'Unknown', symbol: '?', longitude: 0, degree: 0 
+        name: 'Unknown', symbol: ZODIAC_SYMBOLS[0], longitude: 0, degree: 0 
       };
+      
+      // Parse midheaven if available
+      if (savedChart.midheaven) {
+        planets.midheaven = parsePosition(savedChart.midheaven);
+      }
       
       const convertedChart: ChartData = {
         title: savedChart.name,
@@ -637,6 +779,21 @@ export default function SwissEphPage() {
       // Set chart data and show the chart
       setChartData(convertedChart);
       setShowChart(true);
+      
+      // Also update the form fields to match the chart data
+      // This helps if user wants to make adjustments to the saved chart
+      const birthDate = new Date(savedChart.birthDate);
+      setDate(`${birthDate.getDate().toString().padStart(2, '0')}.${(birthDate.getMonth() + 1).toString().padStart(2, '0')}.${birthDate.getFullYear()}`);
+      setTime(savedChart.birthTime);
+      setLocation(savedChart.birthPlace);
+      
+      // Scroll the chart into view
+      setTimeout(() => {
+        const chartElement = document.getElementById('chart-display');
+        if (chartElement) {
+          chartElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 100);
       
     } catch (error) {
       console.error('Error loading saved chart:', error);
@@ -683,12 +840,17 @@ export default function SwissEphPage() {
                   <Label htmlFor="location">Birth Location</Label>
                   <Input 
                     id="location" 
-                    placeholder="New York, NY, USA"
+                    placeholder={locationLoading ? "Detecting your location..." : "Enter your birth location"}
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
                     required
+                    disabled={locationLoading}
                   />
-                  <p className="text-xs text-gray-500 mt-1">Enter city name, optionally with state/country (e.g., "New York, NY" or "Paris, France")</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {locationLoading 
+                      ? "Getting your current location..." 
+                      : "Enter city name, optionally with state/country (e.g., \"New York, NY\" or \"Paris, France\")"}
+                  </p>
                 </div>
                 
                 <Button 
@@ -755,7 +917,7 @@ export default function SwissEphPage() {
               )}
               
               {showChart && (
-                <div className="mt-6 rounded-lg overflow-hidden">
+                <div id="chart-display" className="mt-6 rounded-lg overflow-hidden">
                   <h2 className="text-xl font-semibold mb-2">Natal Chart</h2>
                   
                   {saveResult && (
@@ -774,7 +936,10 @@ export default function SwissEphPage() {
                         planets: {
                           sun: { name: 'Aries', symbol: '♈', longitude: 15, degree: 15, isRetrograde: false },
                           moon: { name: 'Taurus', symbol: '♉', longitude: 45, degree: 15, isRetrograde: false },
-                          mercury: { name: 'Gemini', symbol: '♊ᴿ', longitude: 75, degree: 15, isRetrograde: true }
+                          mercury: { name: 'Gemini', symbol: '♊ᴿ', longitude: 75, degree: 15, isRetrograde: true },
+                          trueNode: { name: 'Cancer', symbol: '♋', longitude: 105, degree: 15, isRetrograde: false },
+                          southNode: { name: 'Capricorn', symbol: '♑', longitude: 285, degree: 15, isRetrograde: false },
+                          midheaven: { name: 'Pisces', symbol: '♓', longitude: 350, degree: 20, isRetrograde: false }
                         },
                         houses: {
                           house1: { cusp: 0, name: 'Aries', symbol: '♈', degree: 0 },

@@ -1493,7 +1493,8 @@ export const saveBirthChart = async (chartData: any) => {
     
     // Extract planet positions
     const { 
-      sun, moon, mercury, venus, mars, jupiter, saturn, uranus, neptune, pluto 
+      sun, moon, mercury, venus, mars, jupiter, saturn, uranus, neptune, pluto,
+      trueNode, midheaven, southNode, meanNode, chiron, meanLilith
     } = chartData.planets || {};
     
     // Create the birth chart in the database
@@ -1506,6 +1507,9 @@ export const saveBirthChart = async (chartData: any) => {
         ascendant: chartData.ascendant?.name 
           ? `${chartData.ascendant.name} ${chartData.ascendant.degree.toFixed(1)}°`
           : null,
+        midheaven: midheaven?.name 
+          ? `${midheaven.name} ${midheaven.degree.toFixed(1)}°` 
+          : null,
         sun: sun?.name ? `${sun.name} ${sun.degree.toFixed(1)}°` : null,
         moon: moon?.name ? `${moon.name} ${moon.degree.toFixed(1)}°` : null,
         mercury: mercury?.name ? `${mercury.name} ${mercury.degree.toFixed(1)}°` : null,
@@ -1516,6 +1520,10 @@ export const saveBirthChart = async (chartData: any) => {
         uranus: uranus?.name ? `${uranus.name} ${uranus.degree.toFixed(1)}°` : null,
         neptune: neptune?.name ? `${neptune.name} ${neptune.degree.toFixed(1)}°` : null,
         pluto: pluto?.name ? `${pluto.name} ${pluto.degree.toFixed(1)}°` : null,
+        trueNode: trueNode?.name ? `${trueNode.name} ${trueNode.degree.toFixed(1)}°` : null,
+        meanNode: meanNode?.name ? `${meanNode.name} ${meanNode.degree.toFixed(1)}°` : null,
+        chiron: chiron?.name ? `${chiron.name} ${chiron.degree.toFixed(1)}°` : null,
+        lilith: meanLilith?.name ? `${meanLilith.name} ${meanLilith.degree.toFixed(1)}°` : null,
         houses: chartData.houses || {},
         aspects: chartData.aspects || [],
         userId: chartData.userId || null,

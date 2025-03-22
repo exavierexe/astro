@@ -15,8 +15,10 @@ const PLANET_SYMBOLS: Record<string, string> = {
   neptune: '♆',
   pluto: '♇',
   ascendant: 'Asc',
-  meanNode: '☊',       // North Node
+  midheaven: 'MC',     // Medium Coeli (Midheaven)
+  meanNode: '☊',       // Mean North Node
   trueNode: '☊',       // True North Node
+  southNode: '☋',      // South Node (always opposite to North Node)
   meanLilith: '⚸',     // Lilith
   chiron: '⚷',         // Chiron
 };
@@ -94,7 +96,7 @@ type ZodiacWheelProps = {
 
 // Helper function to export chart as PNG image
 export function exportChartAsImage(
-  canvasRef: React.RefObject<HTMLCanvasElement>,
+  canvasRef: React.RefObject<HTMLCanvasElement | null>,
   chartTitle: string = 'Birth Chart'
 ): void {
   if (!canvasRef.current) return;
@@ -162,8 +164,10 @@ export function ZodiacWheel({
     neptune: '#08f',      // Bright blue
     pluto: '#80f',        // Purple
     ascendant: '#ff0',    // Bright yellow
+    midheaven: '#ff9',    // Light yellow
     meanNode: '#0f0',     // Bright green
     trueNode: '#0f0',     // Bright green
+    southNode: '#f66',    // Light red
     meanLilith: '#f0f',   // Magenta
     chiron: '#0ff'        // Cyan
   };
@@ -352,16 +356,16 @@ export function ZodiacWheel({
         
         // Draw a semi-transparent black background for better visibility
         ctx.beginPath();
-        ctx.rect(x - 14, y - 14, 28, 28);
+        ctx.rect(x - 18, y - 18, 36, 36);  // Larger background for bigger symbols
         ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
         ctx.fill();
         
         // Draw planet symbol with larger font directly (no circle)
         // Special case for Sun - make it larger than other planets
         if (name === 'sun') {
-          ctx.font = 'bold 26px Arial';  // 2px larger for the Sun
+          ctx.font = 'bold 32px Arial';  // Larger for the Sun
         } else {
-          ctx.font = 'bold 24px Arial';
+          ctx.font = 'bold 30px Arial';  // Increased size for all other planets
         }
         ctx.fillStyle = planetColors[name] || '#fff';
         ctx.textAlign = 'center';
@@ -370,9 +374,9 @@ export function ZodiacWheel({
         
         // Show degree as small text below planet
         const degText = planet.degree.toFixed(0) + '°';
-        ctx.font = '10px Arial';
+        ctx.font = '12px Arial';  // Slightly larger font for better readability
         ctx.fillStyle = '#fff';
-        ctx.fillText(degText, x, y + 22);
+        ctx.fillText(degText, x, y + 26);  // Moved further down to accommodate larger symbol
       });
     }
   };
