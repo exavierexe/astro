@@ -307,7 +307,7 @@ export const querySwissEph = async (params: {
     const normalizedLocation = location.toLowerCase().trim();
     
     // Special case handling for major timezones
-    const specialCases = {
+    const specialCases: Record<string, { hours: number; name: string }> = {
      // 'tokyo': { hours: 9, name: 'JST (UTC+9:00)' },
      // 'beijing': { hours: 8, name: 'China Standard Time (UTC+8:00)' },
     //  'delhi': { hours: 5.5, name: 'India Standard Time (UTC+5:30)' },
@@ -320,10 +320,14 @@ export const querySwissEph = async (params: {
     };
     
     // Check if the location matches any of our special cases
-    let specialCase = null;
+    let specialCase: { city: string; hours: number; name: string } | null = null;
     for (const [cityName, cityInfo] of Object.entries(specialCases)) {
       if (normalizedLocation.includes(cityName)) {
-        specialCase = { city: cityName, ...cityInfo };
+        specialCase = { 
+          city: cityName, 
+          hours: cityInfo.hours,
+          name: cityInfo.name 
+        };
         break;
       }
     }
@@ -740,7 +744,7 @@ export const calculateBirthChartWithSwissEph = async (params: {
     const normalizedLocation = birthPlace.toLowerCase().trim();
     
     // Special case handling for major timezones
-    const specialCases = {
+    const specialCases: Record<string, { hours: number; name: string }> = {
       //'tokyo': { hours: 9, name: 'JST (UTC+9:00)' },
      // 'beijing': { hours: 8, name: 'China Standard Time (UTC+8:00)' },
       //'delhi': { hours: 5.5, name: 'India Standard Time (UTC+5:30)' },
@@ -753,10 +757,14 @@ export const calculateBirthChartWithSwissEph = async (params: {
     };
     
     // Check if the location matches any of our special cases
-    let specialCase = null;
+    let specialCase: { city: string; hours: number; name: string } | null = null;
     for (const [cityName, cityInfo] of Object.entries(specialCases)) {
       if (normalizedLocation.includes(cityName)) {
-        specialCase = { city: cityName, ...cityInfo };
+        specialCase = { 
+          city: cityName, 
+          hours: cityInfo.hours,
+          name: cityInfo.name 
+        };
         break;
       }
     }
