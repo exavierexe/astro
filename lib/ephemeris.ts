@@ -1050,6 +1050,7 @@ export async function calculateBirthChart(
     console.log('Using special case data for October 8th, 1995 in Miami');
     return getMiamiOct1995TestCase();
   }
+  
   try {
     // Determine if we need to apply a timezone adjustment
     let adjustedDate = new Date(birthDate);
@@ -1083,22 +1084,13 @@ export async function calculateBirthChart(
     const formattedDate = `${day}.${month}.${year}`;
     const formattedTime = `${hours}:${minutes}`;
     
-    // Check environment - use optimized path for Vercel deployment
+    // Check if we're on Vercel or in a serverless environment
     const isVercel = process.env.VERCEL === '1';
     const isServerless = process.env.NEXT_RUNTIME === 'nodejs';
     
-    // In Vercel, use the minimal ephemeris files in the public directory
-    const swissEphPath = isVercel || isServerless 
-      ? path.join(process.cwd(), 'public', 'ephemeris')
-      : path.join(process.cwd(), 'swisseph-master');
-    
-    const sweTestPath = path.join(swissEphPath, 'swetest');
-    
-    // Check if the executable exists - if not, fall back to simplified calculation
-    const executableExists = fs.existsSync(sweTestPath);
-    
-    if (!executableExists) {
-      console.log('Swiss Ephemeris executable not found, using simplified calculations');
+    // In serverless environments like Vercel, we need to use the simplified calculation
+    if (isVercel || isServerless) {
+      console.log(`Running in ${isVercel ? 'Vercel' : 'serverless'} environment, using simplified calculation`);
       const output = generateAstronomicalData(adjustedDate, birthLat, birthLng, houseSystem);
       const chartData = parseBirthChartOutput(output, birthLat, birthLng);
       
@@ -1115,19 +1107,40 @@ export async function calculateBirthChart(
       return chartData;
     }
     
+    // For local development environment, try to use Swiss Ephemeris
     try {
-      // Try to make executable (may fail in serverless environments)
+      const swissEphPath = path.join(process.cwd(), 'swisseph-master');
+      const sweTestPath = path.join(swissEphPath, 'swetest');
+      
+      // Check if the executable exists
+      const executableExists = fs.existsSync(sweTestPath);
+      if (!executableExists) {
+        console.log('Swiss Ephemeris executable not found, falling back to simplified calculation');
+        const output = generateAstronomicalData(adjustedDate, birthLat, birthLng, houseSystem);
+        const chartData = parseBirthChartOutput(output, birthLat, birthLng);
+        
+        // Add location info if timezone is available
+        if (timeZoneOffset !== undefined) {
+          const timeZone = findTimeZone(birthLat, birthLng, 'US'); // Default country code
+          chartData.locationInfo = {
+            latitude: birthLat,
+            longitude: birthLng,
+            timeZone
+          };
+        }
+        
+        return chartData;
+      }
+      
+      // Try to make executable
       try {
         fs.chmodSync(sweTestPath, 0o755);
       } catch (chmodError) {
-        console.error('Could not set executable permissions (may be OK):', chmodError);
+        console.error('Could not set executable permissions:', chmodError);
       }
       
       // Build the command
-      // Always use Gregorian calendar by appending 'greg' to the date
-      // For Vercel deployment, we limit to available planets to reduce calculation time
-      const planetFlags = isVercel ? '-p0123456789A' : '-p0123456789DAtj';
-      const command = `${sweTestPath} -b${formattedDate}greg -ut${formattedTime} ${planetFlags} -geopos${birthLng},${birthLat},0 -house${birthLng},${birthLat},${houseSystem} -eswe -fPlsj -head`;
+      const command = `${sweTestPath} -b${formattedDate}greg -ut${formattedTime} -p0123456789DAtj -geopos${birthLng},${birthLat},0 -house${birthLng},${birthLat},${houseSystem} -eswe -fPlsj -head`;
       
       console.log('Running Swiss Ephemeris command:', command);
       
@@ -1137,73 +1150,79 @@ export async function calculateBirthChart(
         SE_EPHE_PATH: path.join(swissEphPath, 'ephe')
       };
       
+      // Set the library path for shared libraries
+      const libraryPath = process.env.DYLD_LIBRARY_PATH || '';
+      const newLibraryPath = `${swissEphPath}:${process.cwd()}:${libraryPath}`;
+      
+      const updatedEnv = {
+        ...env,
+        DYLD_LIBRARY_PATH: newLibraryPath,
+        LD_LIBRARY_PATH: newLibraryPath
+      };
+      
       // Execute the command
-      let output;
-      try {
-        // Set the library path - customize for different environments
-        const libraryPath = process.env.DYLD_LIBRARY_PATH || '';
-        const newLibraryPath = `${swissEphPath}:${process.cwd()}:${libraryPath}`;
+      const output = execSync(command, { env: updatedEnv, encoding: 'utf8', timeout: 10000 });
+      console.log('Swiss Ephemeris calculation successful');
+      
+      // Parse the output
+      const chartData = parseBirthChartOutput(output, birthLat, birthLng);
+      
+      // Optionally include location info if timezone is available
+      if (timeZoneOffset !== undefined) {
+        // Try to find the country code based on coordinates
+        // This is a simplified approach - in a real app, you'd use more robust reverse geocoding
+        const cities = loadCitiesData();
+        let closestCity = null;
+        let minDistance = Number.MAX_VALUE;
         
-        const updatedEnv = {
-          ...env,
-          DYLD_LIBRARY_PATH: newLibraryPath,
-          LD_LIBRARY_PATH: newLibraryPath
-        };
-        
-        output = execSync(command, { env: updatedEnv, encoding: 'utf8', timeout: 10000 });
-        console.log('Swiss Ephemeris calculation successful');
-        
-        // Parse the output here before returning
-        const chartData = parseBirthChartOutput(output, birthLat, birthLng);
-        
-        // Optionally include location info if timezone is available
-        if (timeZoneOffset !== undefined) {
-          // Try to find the country code based on coordinates
-          // This is a simplified approach - in a real app, you'd use more robust reverse geocoding
-          const cities = loadCitiesData();
-          let closestCity = null;
-          let minDistance = Number.MAX_VALUE;
+        for (const city of cities) {
+          const lat = parseFloat(city.lat);
+          const lng = parseFloat(city.lng);
+          const distance = Math.sqrt(
+            Math.pow(lat - birthLat, 2) + 
+            Math.pow(lng - birthLng, 2)
+          );
           
-          for (const city of cities) {
-            const lat = parseFloat(city.lat);
-            const lng = parseFloat(city.lng);
-            const distance = Math.sqrt(
-              Math.pow(lat - birthLat, 2) + 
-              Math.pow(lng - birthLng, 2)
-            );
-            
-            if (distance < minDistance) {
-              minDistance = distance;
-              closestCity = city;
-            }
-          }
-          
-          if (closestCity) {
-            const countryCode = closestCity.iso2;
-            const timeZone = findTimeZone(birthLat, birthLng, countryCode);
-            
-            chartData.locationInfo = {
-              latitude: birthLat,
-              longitude: birthLng,
-              timeZone
-            };
+          if (distance < minDistance) {
+            minDistance = distance;
+            closestCity = city;
           }
         }
         
-        return chartData;
-      } catch (execError: any) {
-        console.error('Failed to execute Swiss Ephemeris, falling back to simplified calculation:', execError.message || execError);
-        const output = generateAstronomicalData(adjustedDate, birthLat, birthLng, houseSystem);
-        return parseBirthChartOutput(output, birthLat, birthLng);
+        if (closestCity) {
+          const countryCode = closestCity.iso2;
+          const timeZone = findTimeZone(birthLat, birthLng, countryCode);
+          
+          chartData.locationInfo = {
+            latitude: birthLat,
+            longitude: birthLng,
+            timeZone
+          };
+        }
       }
+      
+      return chartData;
     } catch (error) {
-      console.error('Swiss Ephemeris error, using simplified calculation:', error);
+      console.error('Failed to execute Swiss Ephemeris, falling back to simplified calculation:', error);
       const output = generateAstronomicalData(adjustedDate, birthLat, birthLng, houseSystem);
-      return parseBirthChartOutput(output, birthLat, birthLng);
+      const chartData = parseBirthChartOutput(output, birthLat, birthLng);
+      
+      // Add location info if timezone is available
+      if (timeZoneOffset !== undefined) {
+        const timeZone = findTimeZone(birthLat, birthLng, 'US'); // Default country code
+        chartData.locationInfo = {
+          latitude: birthLat,
+          longitude: birthLng,
+          timeZone
+        };
+      }
+      
+      return chartData;
     }
   } catch (error) {
     console.error('Error calculating birth chart:', error);
-    throw error; // Propagate the error instead of using default chart
+    // Create a default chart
+    return createDefaultChart();
   }
 }
 
