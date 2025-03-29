@@ -1,0 +1,17 @@
+{
+  "version": 2,
+  "buildCommand": "npm run build",
+  "installCommand": "npm install",
+  "framework": "nextjs",
+  "regions": ["iad1"],
+  "functions": {
+    "app/astrology/**": {
+      "memory": 1024,
+      "maxDuration": 10
+    },
+    "app/swisseph/**": {
+      "memory": 1024,
+      "maxDuration": 10
+    }
+  }
+}

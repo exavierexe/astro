@@ -1,0 +1,9 @@
+# Ignore most of the Swiss Ephemeris data files 
+# but keep the essential files copied to public/ephemeris
+swisseph-master/ephe
+swisseph-master/doc
+swisseph-master/contrib
+swisseph-master/windows
+swisseph-master/setest
+
+# We're now using a smaller subset of files in public/ephemeris
