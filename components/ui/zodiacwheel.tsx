@@ -83,6 +83,7 @@ export type ChartData = {
   title?: string;
   id?: number;
   userId?: number;
+  rawOutput?: string; // Add raw output for Swiss Ephemeris data
 };
 
 type ZodiacWheelProps = {

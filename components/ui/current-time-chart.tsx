@@ -12,6 +12,27 @@ export function CurrentTimeChart() {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   
+  // Get ephemeris command and output from response data if available
+  const [ephemerisCommand, setEphemerisCommand] = useState<string>('');
+  const [ephemerisOutput, setEphemerisOutput] = useState<string>('');
+  const [locationDetails, setLocationDetails] = useState<{
+    localTime: string;
+    utcTime: string;
+    longitude: string;
+    latitude: string;
+    timezone: string;
+    command: string;
+  }>({
+    localTime: '',
+    utcTime: '',
+    longitude: '',
+    latitude: '',
+    timezone: '',
+    command: ''
+  });
+  // State for user's location
+  const [userLocation, setUserLocation] = useState<string | null>(null);
+  
   // Function to parse the Swiss Ephemeris output
   const parseSwissEphOutput = (output: string): ChartData => {
     // This is a simplified version - the full parser is in the swisseph page
@@ -102,12 +123,10 @@ export function CurrentTimeChart() {
       date: dateStr,
       time: timeStr,
       location: userLocation || 'Your Location',
-      title: `Current Sky Chart (${userLocation ? userLocation.split(',')[0] : 'Local'} Time)`
+      title: `Current Sky Chart (${userLocation ? userLocation.split(',')[0] : 'Local'} Time)`,
+      rawOutput: output // Store the raw output for displaying later
     };
   };
-  
-  // State for user's location
-  const [userLocation, setUserLocation] = useState<string | null>(null);
   
   // Calculate the current chart on component mount
   useEffect(() => {
@@ -172,8 +191,11 @@ export function CurrentTimeChart() {
           const coordLocation = `${latitude.toFixed(6)},${longitude.toFixed(6)}`;
           console.log("Using exact coordinates for calculation:", coordLocation);
           
+          // First, find the nearest city and time zone using worldcities.csv and TimeZoneDB
+          // This will be done in the querySwissEph function, which will properly handle 
+          // the conversion of local time to UTC based on the detected timezone
+          
           // Query the Swiss Ephemeris with local time and exact coordinates
-          // The querySwissEph function will convert local time to UTC based on the detected timezone
           ephemerisResponse = await querySwissEph({
             date: localDate,
             time: localTime,
@@ -189,6 +211,8 @@ export function CurrentTimeChart() {
           const defaultCoordinates = "40.7128,-74.0060";
           console.log("Using default coordinates for New York:", defaultCoordinates);
           
+          // The querySwissEph function will handle timezone lookup and UTC conversion
+          // based on these coordinates using worldcities.csv and TimeZoneDB
           ephemerisResponse = await querySwissEph({
             date: localDate,
             time: localTime,
@@ -268,6 +292,53 @@ export function CurrentTimeChart() {
     router.push('/swisseph');
   };
   
+  // Update chart information when chartData changes
+  useEffect(() => {
+    if (chartData) {
+      // Get current location details 
+      const now = new Date();
+      const localTimeStr = now.toLocaleString();
+      const utcTimeStr = now.toUTCString();
+
+      // Parse latitude and longitude from the query output if available
+      let latitude = '';
+      let longitude = '';
+      let timezone = '';
+      let command = '';
+
+      // Navigate through the output to find location info
+      if (chartData?.rawOutput) {
+        const lines = chartData.rawOutput.split('\n');
+        for (const line of lines) {
+          if (line.includes('Latitude:')) {
+            latitude = line.trim();
+          } else if (line.includes('Longitude:')) {
+            longitude = line.trim();
+          } else if (line.includes('Time Zone:')) {
+            timezone = line.trim();
+          } else if (line.includes('Running Swiss Ephemeris command:')) {
+            command = line.replace('Running Swiss Ephemeris command:', '').trim();
+          }
+        }
+
+        // Find the command and output sections
+        const commandMatch = chartData.rawOutput.match(/---- SWISS EPHEMERIS OUTPUT ----\n([\s\S]*)/);
+        if (commandMatch && commandMatch[1]) {
+          setEphemerisOutput(commandMatch[1].trim());
+        }
+      }
+
+      setLocationDetails({
+        localTime: localTimeStr,
+        utcTime: utcTimeStr,
+        longitude: longitude || 'Unknown',
+        latitude: latitude || 'Unknown',
+        timezone: timezone || 'Unknown',
+        command: command || 'Unknown'
+      });
+    }
+  }, [chartData]);
+  
   if (loading) {
     return (
       <div className="flex flex-col items-center p-6 rounded-lg bg-gray-900 border border-gray-800">
@@ -288,7 +359,7 @@ export function CurrentTimeChart() {
       </div>
     );
   }
-  
+
   return (
     <div className="flex flex-col items-center">
       <h2 className="text-2xl font-bold mb-4">Current Planetary Positions{userLocation ? ` (${userLocation.split(',')[0]})` : ' (Local Time)'}</h2>
@@ -318,6 +389,34 @@ export function CurrentTimeChart() {
           height={600}
           hideControls={true}
         />
+      </div>
+      
+      {/* Chart information details */}
+      <div className="w-full max-w-4xl mt-6 mb-6 bg-gray-900/50 rounded-lg p-4 text-sm font-mono">
+        <h3 className="text-lg font-semibold mb-2 border-b border-gray-700 pb-2">Chart Details</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <p><span className="font-semibold">Local Time:</span> {locationDetails.localTime}</p>
+            <p><span className="font-semibold">UTC Time:</span> {locationDetails.utcTime}</p>
+            <p><span className="font-semibold">Time Zone:</span> {locationDetails.timezone.replace('Time Zone: ', '')}</p>
+          </div>
+          <div>
+            <p><span className="font-semibold">Latitude:</span> {locationDetails.latitude.replace('Latitude: ', '')}</p>
+            <p><span className="font-semibold">Longitude:</span> {locationDetails.longitude.replace('Longitude: ', '')}</p>
+          </div>
+        </div>
+        
+        <div className="mt-4">
+          <h4 className="font-semibold mb-1 border-b border-gray-700 pb-1">Swiss Ephemeris Command</h4>
+          <pre className="bg-black/30 p-3 rounded text-xs overflow-x-auto mb-4">
+            {locationDetails.command !== 'Unknown' ? locationDetails.command : 'Command not available'}
+          </pre>
+          
+          <h4 className="font-semibold mb-1 border-b border-gray-700 pb-1">Swiss Ephemeris Output</h4>
+          <pre className="bg-black/30 p-3 rounded text-xs overflow-x-auto max-h-32 overflow-y-auto">
+            {ephemerisOutput || 'No output data available'}
+          </pre>
+        </div>
       </div>
       
       <div className="mt-4">
