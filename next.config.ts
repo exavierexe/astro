@@ -10,17 +10,7 @@ const nextConfig: NextConfig = {
     ],
   },
   // Use standalone output for better optimization
-  output: 'standalone',
-  
-  // Optimize file size by excluding unnecessary files
-  // Use the correct property for the experimental configuration
-  experimental: {
-    // Optimize tracing
-    turbotrace: {
-      contextDirectory: __dirname,
-      processCwd: __dirname,
-    },
-  },
+  output: 'standalone'
 };
 
 export default nextConfig;
