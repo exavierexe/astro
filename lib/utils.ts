@@ -45,3 +45,39 @@ export function getCurrentTimeFormatted(): string {
   
   return `${hours}:${minutes}`;
 }
+
+/**
+ * Detect if the application is running in a serverless environment like Vercel
+ * 
+ * @returns True if running in a serverless environment, false otherwise
+ */
+export function isServerlessEnvironment(): boolean {
+  // Check for Vercel environment variables
+  if (process.env.VERCEL || process.env.VERCEL_ENV) {
+    return true;
+  }
+  
+  // Check for other common serverless environment variables
+  if (process.env.AWS_LAMBDA_FUNCTION_NAME || 
+      process.env.NETLIFY ||
+      process.env.FUNCTIONS_EMULATOR) {
+    return true;
+  }
+  
+  // Check for absence of file system access (a common limitation in serverless environments)
+  try {
+    // This is a simple test that would typically fail in serverless environments
+    // but succeed in development/server environments
+    if (process.env.NODE_ENV === 'production') {
+      // In production, be cautious and assume serverless unless we're confident it's not
+      // This prevents errors when running native code in production
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    // If any errors occur during the check, assume we're in a serverless environment
+    console.log('Error detecting environment, assuming serverless:', error);
+    return true;
+  }
+}

@@ -1,0 +1,20 @@
+# Ignore the entire Swiss Ephemeris directory, we have minimal copies in public/ephemeris
+swisseph-master/**
+
+# Node modules
+**/node_modules/sweph/**
+**/node_modules/swisseph-v2/**
+
+# Unnecessary files in node_modules to reduce size
+**/node_modules/**/*.md
+**/node_modules/**/*.txt
+**/node_modules/**/test/**
+**/node_modules/**/tests/**
+**/node_modules/**/docs/**
+**/node_modules/**/.git/**
+
+# Ignore temporary files
+**/.DS_Store
+**/.env.local
+**/.cache
+**/.next/cache
