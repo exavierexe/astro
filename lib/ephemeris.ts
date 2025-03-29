@@ -850,7 +850,7 @@ export async function geocodeLocation(locationInput: string): Promise<{
     return {
       latitude: 0,
       longitude: 0,
-      formattedAddress: `Location "${locationName}" not found. Please try a different city name.`,
+      formattedAddress: `Location "${locationInput}" not found. Please try a different city name.`,
       // Provide UTC as a safe default timezone
       timeZone: {
         zoneName: 'UTC',
@@ -864,7 +864,7 @@ export async function geocodeLocation(locationInput: string): Promise<{
     
     // Try fallback database if there was an error
     try {
-      const input = locationName.toLowerCase().trim();
+      const input = locationInput.toLowerCase().trim();
       if (FALLBACK_LOCATIONS[input]) {
         console.log('Error occurred, using fallback location database');
         const location = FALLBACK_LOCATIONS[input];
