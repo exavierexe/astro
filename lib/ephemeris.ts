@@ -467,7 +467,6 @@ function findTimeZone(latitude: number, longitude: number, countryCode: string):
           return {
             zoneName,
             utcOffset: zoneData.utcOffset,
-            isDst: zoneData.isDst,
             countryName: countries.get(countryCode) || 'United States'
           };
         }
@@ -571,7 +570,6 @@ function findTimeZone(latitude: number, longitude: number, countryCode: string):
             return {
               zoneName: closestZone.zoneName,
               utcOffset: closestZone.utcOffset,
-              isDst: closestZone.isDst,
               countryName: countries.get(countryCode) || countryCode || 'Unknown'
             };
           }
@@ -594,7 +592,6 @@ function findTimeZone(latitude: number, longitude: number, countryCode: string):
         return {
           zoneName: closestZone.zoneName,
           utcOffset: closestZone.utcOffset,
-          isDst: closestZone.isDst,
           countryName: countries.get(countryCode) || countryCode || 'Unknown'
         };
       }
@@ -618,7 +615,6 @@ function findTimeZone(latitude: number, longitude: number, countryCode: string):
     return {
       zoneName: timezoneName,
       utcOffset: approxOffsetSeconds,
-      isDst: false, // Default to standard time for approximation
       countryName: countries.get(countryCode) || countryCode || 'Unknown'
     };
   } catch (error) {
@@ -626,7 +622,6 @@ function findTimeZone(latitude: number, longitude: number, countryCode: string):
     return {
       zoneName: 'UTC',
       utcOffset: 0,
-      isDst: false,
       countryName: 'Unknown'
     };
   }
@@ -672,7 +667,8 @@ export async function geocodeLocation(locationInput: string): Promise<{
       console.log(`Using direct coordinates: lat ${latitude}, lon ${longitude}`);
       
       // Find timezone for these coordinates
-      const timeZone = findTimeZone(latitude, longitude);
+      // Use a default country code 'US' when none is provided
+      const timeZone = findTimeZone(latitude, longitude, 'US');
       
       return {
         latitude,
@@ -752,10 +748,10 @@ export async function geocodeLocation(locationInput: string): Promise<{
       };
     }
     
-    console.log(`City "${locationName}" not found in CSV database`);
+    console.log(`City "${locationInput}" not found in CSV database`);
     
     // If CSV lookup failed, fall back to our database
-    const input = locationName.toLowerCase().trim();
+    const input = locationInput.toLowerCase().trim();
     
     // Try direct match with known locations
     if (FALLBACK_LOCATIONS[input]) {
@@ -777,7 +773,6 @@ export async function geocodeLocation(locationInput: string): Promise<{
             timeZone: {
               zoneName: location.timeZoneName,
               utcOffset: tzData.utcOffset,
-              isDst: tzData.isDst,
               countryName
             }
           };
@@ -809,7 +804,6 @@ export async function geocodeLocation(locationInput: string): Promise<{
             timeZone: {
               zoneName: location.timeZoneName,
               utcOffset: tzData.utcOffset,
-              isDst: tzData.isDst,
               countryName
             }
           };
@@ -840,7 +834,6 @@ export async function geocodeLocation(locationInput: string): Promise<{
               timeZone: {
                 zoneName: data.timeZoneName,
                 utcOffset: tzData.utcOffset,
-                isDst: tzData.isDst,
                 countryName
               }
             };

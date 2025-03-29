@@ -141,9 +141,9 @@ export function SavedBirthCharts({ userId, onSelectChart }: SavedChartProps) {
                 variant="destructive"
                 size="sm"
                 className="flex-1"
-                disabled={deleteStatus?.id === chart.id && deleteStatus.status === 'pending'}
+                disabled={deleteStatus !== null && deleteStatus.id === chart.id && deleteStatus.status === 'pending'}
               >
-                {deleteStatus?.id === chart.id && deleteStatus.status === 'pending' ? 'Deleting...' : 'Delete'}
+                {deleteStatus !== null && deleteStatus.id === chart.id && deleteStatus.status === 'pending' ? 'Deleting...' : 'Delete'}
               </Button>
             </div>
           </Card>

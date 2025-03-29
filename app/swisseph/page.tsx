@@ -25,13 +25,12 @@ function parseSwissEphOutput(output: string): ChartData {
     };
   }
   
-  // Define the types with isRetrograde property
+  // Define the types
   type PlanetData = { 
     name: string; 
     symbol: string; 
     longitude: number; 
     degree: number; 
-    isRetrograde?: boolean; 
   };
   
   type HouseData = { 
@@ -140,8 +139,7 @@ function parseSwissEphOutput(output: string): ChartData {
             symbol: symbol,
             // This is the key longitude value that determines position on the wheel
             longitude: absoluteDegree,
-            degree: degreeInSign,
-            isRetrograde
+            degree: degreeInSign
           };
           
           console.log(`Parsed ${planetName} at ${absoluteDegree}° (${degreeInSign}° ${sign}), retrograde: ${isRetrograde}`);
@@ -454,12 +452,12 @@ export default function SwissEphPage() {
           // Create a minimal chart data object with default planets
           const defaultChart: ChartData = {
             planets: {
-              sun: { name: 'Aries', symbol: '♈', longitude: 15, degree: 15, isRetrograde: false },
-              moon: { name: 'Taurus', symbol: '♉', longitude: 45, degree: 15, isRetrograde: false },
-              mercury: { name: 'Gemini', symbol: '♊ᴿ', longitude: 75, degree: 15, isRetrograde: true }, // Mercury retrograde as example
-              trueNode: { name: 'Cancer', symbol: '♋', longitude: 105, degree: 15, isRetrograde: false },
-              southNode: { name: 'Capricorn', symbol: '♑', longitude: 285, degree: 15, isRetrograde: false }, // Opposite true node
-              midheaven: { name: 'Pisces', symbol: '♓', longitude: 350, degree: 20, isRetrograde: false }
+              sun: { name: 'Aries', symbol: '♈', longitude: 15, degree: 15 },
+              moon: { name: 'Taurus', symbol: '♉', longitude: 45, degree: 15 },
+              mercury: { name: 'Gemini', symbol: '♊ᴿ', longitude: 75, degree: 15 }, // Mercury retrograde as example
+              trueNode: { name: 'Cancer', symbol: '♋', longitude: 105, degree: 15 },
+              southNode: { name: 'Capricorn', symbol: '♑', longitude: 285, degree: 15 }, // Opposite true node
+              midheaven: { name: 'Pisces', symbol: '♓', longitude: 350, degree: 20 }
             },
             houses: {} as Record<string, { cusp: number; name: string; symbol: string; degree: number }>,
             ascendant: { name: 'Aries', symbol: '♈', longitude: 0, degree: 0 },
@@ -934,12 +932,12 @@ export default function SwissEphPage() {
                     <ZodiacWheel 
                       chartData={chartData || {
                         planets: {
-                          sun: { name: 'Aries', symbol: '♈', longitude: 15, degree: 15, isRetrograde: false },
-                          moon: { name: 'Taurus', symbol: '♉', longitude: 45, degree: 15, isRetrograde: false },
-                          mercury: { name: 'Gemini', symbol: '♊ᴿ', longitude: 75, degree: 15, isRetrograde: true },
-                          trueNode: { name: 'Cancer', symbol: '♋', longitude: 105, degree: 15, isRetrograde: false },
-                          southNode: { name: 'Capricorn', symbol: '♑', longitude: 285, degree: 15, isRetrograde: false },
-                          midheaven: { name: 'Pisces', symbol: '♓', longitude: 350, degree: 20, isRetrograde: false }
+                          sun: { name: 'Aries', symbol: '♈', longitude: 15, degree: 15 },
+                          moon: { name: 'Taurus', symbol: '♉', longitude: 45, degree: 15 },
+                          mercury: { name: 'Gemini', symbol: '♊ᴿ', longitude: 75, degree: 15 },
+                          trueNode: { name: 'Cancer', symbol: '♋', longitude: 105, degree: 15 },
+                          southNode: { name: 'Capricorn', symbol: '♑', longitude: 285, degree: 15 },
+                          midheaven: { name: 'Pisces', symbol: '♓', longitude: 350, degree: 20 }
                         },
                         houses: {
                           house1: { cusp: 0, name: 'Aries', symbol: '♈', degree: 0 },
