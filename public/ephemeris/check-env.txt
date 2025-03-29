@@ -1,0 +1,3 @@
+Swiss Ephemeris files are properly installed in the public/ephemeris directory.
+When running in Vercel, ephemeris.ts will automatically detect this location
+and use these files instead of the full swisseph-master directory.

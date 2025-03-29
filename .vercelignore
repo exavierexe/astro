@@ -1,9 +1,24 @@
-# Ignore most of the Swiss Ephemeris data files 
-# but keep the essential files copied to public/ephemeris
-swisseph-master/ephe
-swisseph-master/doc
-swisseph-master/contrib
-swisseph-master/windows
-swisseph-master/setest
+# Ignore large Swiss Ephemeris directories, we have minimal copies in public/ephemeris
+swisseph-master/ephe/**
+swisseph-master/doc/**
+swisseph-master/contrib/**
+swisseph-master/windows/**
+swisseph-master/setest/**
 
-# We're now using a smaller subset of files in public/ephemeris
+# Node modules
+**/node_modules/sweph/**
+**/node_modules/swisseph-v2/**
+
+# Unnecessary files in node_modules to reduce size
+**/node_modules/**/*.md
+**/node_modules/**/*.txt
+**/node_modules/**/test/**
+**/node_modules/**/tests/**
+**/node_modules/**/docs/**
+**/node_modules/**/.git/**
+
+# Ignore temporary files
+**/.DS_Store
+**/.env.local
+**/.cache
+**/.next/cache
