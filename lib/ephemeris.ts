@@ -855,7 +855,6 @@ export async function geocodeLocation(locationInput: string): Promise<{
       timeZone: {
         zoneName: 'UTC',
         utcOffset: 0,
-        isDst: false,
         countryName: 'Unknown'
       }
     };
@@ -884,7 +883,6 @@ export async function geocodeLocation(locationInput: string): Promise<{
                 timeZone: {
                   zoneName: location.timeZoneName,
                   utcOffset: tzData.utcOffset,
-                  isDst: tzData.isDst,
                   countryName
                 }
               };
@@ -909,7 +907,6 @@ export async function geocodeLocation(locationInput: string): Promise<{
       timeZone: {
         zoneName: 'UTC',
         utcOffset: 0,
-        isDst: false,
         countryName: 'Unknown'
       }
     };

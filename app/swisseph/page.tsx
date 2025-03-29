@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useUser } from '@clerk/nextjs'
 import { Button } from '@/components/ui/button'
@@ -301,10 +301,16 @@ const ZODIAC_SIGNS = [
 
 const ZODIAC_SYMBOLS = ['♈', '♉', '♊', '♋', '♌', '♍', '♎', '♏', '♐', '♑', '♒', '♓'];
 
-export default function SwissEphPage() {
-  const { isLoaded, isSignedIn, user } = useUser();
+// Wrapper component to handle search params with Suspense
+function ChartParamsWrapper({ children }: { children: (props: { chartIdFromUrl: string | null }) => React.ReactNode }) {
   const searchParams = useSearchParams();
   const chartIdFromUrl = searchParams.get('chart');
+  
+  return <>{children({ chartIdFromUrl })}</>;
+}
+
+function SwissEphContent({ chartIdFromUrl }: { chartIdFromUrl: string | null }) {
+  const { isLoaded, isSignedIn, user } = useUser();
   
   // Get current date in the user's local time zone
   const currentDate = new Date();
@@ -1007,4 +1013,14 @@ export default function SwissEphPage() {
       </div>
     </div>
   )
+}
+
+export default function SwissEphPage() {
+  return (
+    <Suspense fallback={<div className="container mx-auto px-4 py-8">Loading chart data...</div>}>
+      <ChartParamsWrapper>
+        {({ chartIdFromUrl }) => <SwissEphContent chartIdFromUrl={chartIdFromUrl} />}
+      </ChartParamsWrapper>
+    </Suspense>
+  );
 }
