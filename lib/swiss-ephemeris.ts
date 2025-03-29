@@ -364,10 +364,20 @@ export async function calculateBirthChart(
     
     // For local development environment, try to use Swiss Ephemeris
     try {
-      const swissEphPath = path.join(process.cwd(), 'swisseph-master');
-      const sweTestPath = path.join(swissEphPath, 'swetest');
+      // First try the public/ephemeris directory
+      const publicEphePath = path.join(process.cwd(), 'public', 'ephemeris');
+      let sweTestPath = path.join(publicEphePath, 'swetest');
+      let ephePath = path.join(publicEphePath, 'ephe');
       
-      // Check if the executable exists
+      // If not found in public/ephemeris, fall back to swisseph-master
+      if (!fs.existsSync(sweTestPath)) {
+        console.log('Swiss Ephemeris executable not found in public/ephemeris, trying swisseph-master');
+        const swissEphPath = path.join(process.cwd(), 'swisseph-master');
+        sweTestPath = path.join(swissEphPath, 'swetest');
+        ephePath = path.join(swissEphPath, 'ephe');
+      }
+      
+      // Check if the executable exists in either location
       const executableExists = fs.existsSync(sweTestPath);
       if (!executableExists) {
         console.log('Swiss Ephemeris executable not found, falling back to simplified calculation');
@@ -390,12 +400,13 @@ export async function calculateBirthChart(
       // Set up environment
       const env = {
         ...process.env,
-        SE_EPHE_PATH: path.join(swissEphPath, 'ephe')
+        SE_EPHE_PATH: ephePath
       };
       
       // Set the library path for shared libraries
       const libraryPath = process.env.DYLD_LIBRARY_PATH || '';
-      const newLibraryPath = `${swissEphPath}:${process.cwd()}:${libraryPath}`;
+      // Include both possible locations in the library path
+      const newLibraryPath = `${path.dirname(sweTestPath)}:${process.cwd()}:${libraryPath}`;
       
       const updatedEnv = {
         ...env,

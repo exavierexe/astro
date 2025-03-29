@@ -34,7 +34,14 @@ const essentialFiles = [
 ];
 
 essentialFiles.forEach(file => {
-  const sourcePath = path.join(swissephPath, 'ephe', file);
+  // Check in ephe directory first
+  let sourcePath = path.join(swissephPath, 'ephe', file);
+  
+  // If not found in ephe, check in root directory
+  if (!fs.existsSync(sourcePath)) {
+    sourcePath = path.join(swissephPath, file);
+  }
+  
   const destPath = path.join(publicEphePath, file);
   
   if (fs.existsSync(sourcePath)) {

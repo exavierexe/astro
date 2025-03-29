@@ -19,12 +19,24 @@ console.log('Working directory:', process.cwd());
 // Test direct command execution
 console.log('\nTesting direct Swiss Ephemeris command:');
 try {
-  const swissephPath = path.join(process.cwd());
-  const sweTestPath = path.join(swissephPath, 'swetest');
+  // First try in public/ephemeris
+  const rootDir = process.cwd();
+  const publicEphePath = path.join(rootDir, 'public', 'ephemeris');
+  let sweTestPath = path.join(publicEphePath, 'swetest');
+  let ephePath = path.join(publicEphePath, 'ephe');
   
-  // Check if executable exists
+  // If not found in public/ephemeris, try in swisseph-master
+  if (!fs.existsSync(sweTestPath)) {
+    console.log('Swetest not found in public/ephemeris, checking swisseph-master...');
+    const swissephPath = path.join(rootDir);
+    sweTestPath = path.join(swissephPath, 'swetest');
+    ephePath = path.join(swissephPath, 'ephe');
+  }
+  
+  // Check if executable exists in either location
   if (fs.existsSync(sweTestPath)) {
     console.log('Swetest executable found at:', sweTestPath);
+    console.log('Using ephemeris path:', ephePath);
     
     // Make sure it's executable
     try {
@@ -40,10 +52,17 @@ try {
     const command = `${sweTestPath} -b${testDate}greg -ut${testTime} -p0 -head`;
     
     console.log('Running command:', command);
+    
+    // Set the library path for shared libraries
+    const libraryPath = process.env.DYLD_LIBRARY_PATH || '';
+    const newLibraryPath = `${path.dirname(sweTestPath)}:${rootDir}:${libraryPath}`;
+    
     const output = execSync(command, { 
       env: {
         ...process.env,
-        SE_EPHE_PATH: path.join(swissephPath, 'ephe')
+        SE_EPHE_PATH: ephePath,
+        DYLD_LIBRARY_PATH: newLibraryPath,
+        LD_LIBRARY_PATH: newLibraryPath
       },
       encoding: 'utf8', 
       timeout: 10000 
@@ -53,7 +72,7 @@ try {
     console.log(output);
     console.log('Direct command test completed successfully.');
   } else {
-    console.error('Swetest executable not found at:', sweTestPath);
+    console.error('Swetest executable not found in either location');
   }
 } catch (error) {
   console.error('Error running direct command test:', error);
