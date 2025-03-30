@@ -8,7 +8,7 @@ import { CardWithForm } from "@/components/ui/cardwithform";
 import { SignUpButton } from "@clerk/nextjs";
 import { ArrowRightIcon } from "lucide-react";
 import { hero } from "@/components/ui/heroimage";
-import { CurrentTimeChart } from "@/components/ui/current-time-chart";
+
 import heroimage from "../public/visuals/heroimage.jpg";
 export default function Home() {
 
@@ -25,7 +25,7 @@ export default function Home() {
             {/* Chart Section */}
             <div className="flex justify-center w-full">
               <div className="bg-gray-900/70 backdrop-blur-sm p-6 rounded-xl border border-gray-800 w-full max-w-4xl">
-                <CurrentTimeChart />
+                
               </div>
             </div>
             

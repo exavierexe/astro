@@ -36,6 +36,14 @@ const TIME_ZONE_BOUNDARIES = [
   { min: 180, max: 195, name: 'UTC+12:00' }
 ];
 
+interface City {
+  city: string;
+  country: string;
+  iso2: string;
+  lat: string;
+  lng: string;
+}
+
 //export function getData() {
 //    const sql = neon(process.env.DATABASE_URL);
  //   const data = await sql`...`;
@@ -269,8 +277,8 @@ export const querySwissEph = async (params: {
     console.log(`UTC time: ${dateObj.toUTCString()}`);
     
     // Now use the pure JavaScript ephemeris package to calculate planet positions
-    // Import ephemeris directly here since this is a server action
-    const ephemerisJs = await import('ephemeris');
+    // Use our wrapper to avoid TypeScript issues
+    const ephemerisJs = require('./lib/ephemeriswrapper');
     
     // Calculate the positions using ephemeris.js
     const result = ephemerisJs.getAllPlanets(
@@ -446,7 +454,9 @@ export const querySwissEph = async (params: {
     // Add planet positions
     formattedOutput += 'Planets:\n';
     for (const [name, data] of Object.entries(planetData)) {
-      formattedOutput += `${name.padEnd(12)} ${data.formattedPosition}\n`;
+      // Add type assertion to handle 'unknown' type
+      const typedData = data as { formattedPosition: string };
+      formattedOutput += `${name.padEnd(12)} ${typedData.formattedPosition}\n`;
     }
     
     // Add house cusps if available
@@ -455,18 +465,21 @@ export const querySwissEph = async (params: {
       
       // First add special points
       if (houseData['Ascendant']) {
-        formattedOutput += `Ascendant    ${houseData['Ascendant'].formattedPosition}\n`;
+        const ascData = houseData['Ascendant'] as { formattedPosition: string };
+        formattedOutput += `Ascendant    ${ascData.formattedPosition}\n`;
       }
       
       if (houseData['Midheaven']) {
-        formattedOutput += `Midheaven    ${houseData['Midheaven'].formattedPosition}\n`;
+        const mcData = houseData['Midheaven'] as { formattedPosition: string };
+        formattedOutput += `Midheaven    ${mcData.formattedPosition}\n`;
       }
       
       // Then add house cusps
       for (let i = 1; i <= 12; i++) {
         const houseKey = `House ${i}`;
         if (houseData[houseKey]) {
-          formattedOutput += `house ${i.toString().padStart(2)}     ${houseData[houseKey].formattedPosition}\n`;
+          const houseData2 = houseData[houseKey] as { formattedPosition: string };
+          formattedOutput += `house ${i.toString().padStart(2)}     ${houseData2.formattedPosition}\n`;
         }
       }
     }
@@ -636,8 +649,7 @@ export const calculateBirthChartWithSwissEph = async (params: {
       parsedBirthDate,
       geocodedLocation.latitude,
       geocodedLocation.longitude,
-      'E', // Use Equal house system (Placidus not available in ephemeris.js)
-      null // Don't pass timezone offset as we're already including it in the date object
+      'E' // Use Equal house system (Placidus not available in ephemeris.js)      
     );
     
     // Format the data for return
@@ -696,7 +708,7 @@ export async function determineTimeZone(longitude: number, latitude: number): Pr
     
     // Instead of loading city data from the file system, which doesn't work in serverless,
     // we'll use a simple longitude-based calculation which is more compatible with serverless
-    const cities = [];
+    const cities: City[] = [];
     
     // Find the closest city
     let closestCity = null;

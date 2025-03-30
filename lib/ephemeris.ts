@@ -3,8 +3,8 @@ import path from 'path';
 import fs from 'fs';
 import { parse } from 'csv-parse/sync';
 
-// Import the pure JavaScript ephemeris package
-import * as ephemerisJs from 'ephemeris';
+// Import our ephemeris wrapper to avoid TypeScript issues
+const ephemerisJs = require('./ephemeriswrapper');
 
 // Constants
 const ZODIAC_SIGNS = [
@@ -24,9 +24,26 @@ let countriesCache: Map<string, string> | null = null;
 function loadCitiesData(): any[] {
   if (citiesCache) return citiesCache;
   
+  // Skip file operations in browser environment
+  if (typeof window !== 'undefined') {
+    console.log('Running in browser environment, skipping cities file loading');
+    const emptyArray: any[] = [];
+    citiesCache = emptyArray;
+    return emptyArray;
+  }
+  
   try {
     const csvPath = path.join(process.cwd(), 'public', 'worldcities.csv');
-    const fileContent = fs.readFileSync(csvPath, 'utf8');
+    let fileContent;
+    
+    try {
+      fileContent = fs.readFileSync(csvPath, 'utf8');
+    } catch (readError) {
+      console.warn('Could not read cities file:', readError);
+      const emptyArray: any[] = [];
+      citiesCache = emptyArray;
+      return emptyArray;
+    }
     
     // Parse CSV data
     const records = parse(fileContent, {
@@ -49,10 +66,27 @@ function loadCitiesData(): any[] {
 function loadTimeZoneData(): Map<string, any> {
   if (timeZonesCache) return timeZonesCache;
   
+  // Create an empty map as a fallback
+  const timeZonesMap = new Map();
+  
+  // Skip file operations in browser environment
+  if (typeof window !== 'undefined') {
+    console.log('Running in browser environment, skipping timezone file loading');
+    timeZonesCache = timeZonesMap;
+    return timeZonesMap;
+  }
+  
   try {
-    const timeZonesMap = new Map();
     const csvPath = path.join(process.cwd(), 'public', 'TimeZoneDB.csv', 'time_zone.csv');
-    const fileContent = fs.readFileSync(csvPath, 'utf8');
+    let fileContent;
+    
+    try {
+      fileContent = fs.readFileSync(csvPath, 'utf8');
+    } catch (readError) {
+      console.warn('Could not read timezone file:', readError);
+      timeZonesCache = timeZonesMap;
+      return timeZonesMap;
+    }
     
     // Parse CSV data
     // Format: Zone_Name,Country_Code,Zone_Type,Start_Time,UTC_Offset,DST_Flag
@@ -254,10 +288,27 @@ function loadTimeZoneData(): Map<string, any> {
 function loadCountryData(): Map<string, string> {
   if (countriesCache) return countriesCache;
   
+  // Create an empty map as a fallback
+  const countriesMap = new Map();
+  
+  // Skip file operations in browser environment
+  if (typeof window !== 'undefined') {
+    console.log('Running in browser environment, skipping country file loading');
+    countriesCache = countriesMap;
+    return countriesMap;
+  }
+  
   try {
-    const countriesMap = new Map();
     const csvPath = path.join(process.cwd(), 'public', 'TimeZoneDB.csv', 'country.csv');
-    const fileContent = fs.readFileSync(csvPath, 'utf8');
+    let fileContent;
+    
+    try {
+      fileContent = fs.readFileSync(csvPath, 'utf8');
+    } catch (readError) {
+      console.warn('Could not read country file:', readError);
+      countriesCache = countriesMap;
+      return countriesMap;
+    }
     
     // Parse CSV data
     // Format: Country_Code,Country_Name
