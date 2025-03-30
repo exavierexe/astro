@@ -956,12 +956,25 @@ export async function calculateBirthChart(
     console.log(`UTC time: ${birthDate.toUTCString()}`);
     
     // Calculate using ephemeris.js - it takes care of Julian Day calculation internally
+    console.log(`Calling ephemeris.js with:`, {
+      date: birthDate.toISOString(),
+      longitude: birthLng,
+      latitude: birthLat
+    });
+    
     const result = ephemerisJs.getAllPlanets(
       birthDate,
       birthLng,
       birthLat,
       0 // height in meters
     );
+    
+    console.log(`ephemeris.js result structure:`, {
+      hasDate: !!result.date,
+      dateKeys: result.date ? Object.keys(result.date) : [],
+      hasObserved: !!result.observed,
+      observedKeys: result.observed ? Object.keys(result.observed) : []
+    });
     
     console.log('Ephemeris calculation result:', JSON.stringify(result.date));
     

@@ -175,6 +175,60 @@ export function CurrentTimeChart() {
     const dateStr = now.toLocaleDateString();
     const timeStr = now.toLocaleTimeString();
     
+    // If no houses were found, create default equal houses
+    if (Object.keys(houses).length === 0) {
+      for (let i = 1; i <= 12; i++) {
+        const houseBaseAngle = (i - 1) * 30;
+        const houseLongitude = (ascendant.longitude + houseBaseAngle) % 360;
+        const signIndex = Math.floor(houseLongitude / 30);
+        const degree = houseLongitude % 30;
+        
+        houses[`house${i}`] = {
+          cusp: houseLongitude,
+          name: ZODIAC_SIGNS[signIndex],
+          symbol: ZODIAC_SYMBOLS[signIndex],
+          degree
+        };
+      }
+    }
+    
+    // Ensure there's a minimum set of planets for the chart to display correctly
+    const requiredPlanets = ['sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto', 'trueNode'];
+    
+    for (const planet of requiredPlanets) {
+      if (!planets[planet]) {
+        // Create a placeholder planet in Aries at 0 degrees
+        planets[planet] = {
+          name: 'Aries',
+          symbol: '♈',
+          longitude: 0,
+          degree: 0
+        };
+      }
+    }
+    
+    // Add south node if it doesn't exist
+    if (!planets.southNode && planets.trueNode) {
+      const trueNodeLong = planets.trueNode.longitude;
+      const southNodeLong = (trueNodeLong + 180) % 360;
+      const southNodeSignIndex = Math.floor(southNodeLong / 30);
+      const southNodeDegree = southNodeLong % 30;
+      
+      planets.southNode = {
+        name: ZODIAC_SIGNS[southNodeSignIndex],
+        symbol: '☋',
+        longitude: southNodeLong,
+        degree: southNodeDegree
+      };
+    }
+    
+    // For debugging
+    console.log("Final chart data:", {
+      planets: Object.keys(planets),
+      houses: Object.keys(houses),
+      ascendant
+    });
+    
     return {
       planets,
       houses,

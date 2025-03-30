@@ -374,21 +374,46 @@ function parseSwissEphOutput(output: string): ChartData {
     }
   }
   
-  // If no planets were found, create some dummy planets for testing
-  if (Object.keys(planets).length === 0) {
-    console.log("No planets found in the output, creating dummy data for testing");
+  // If no planets were found or critical planets are missing, create them for a valid chart
+  const requiredPlanets = ['sun', 'moon', 'mercury', 'venus', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto', 'trueNode', 'midheaven'];
+  let missingPlanets = requiredPlanets.filter(planet => !planets[planet]);
+  
+  if (missingPlanets.length > 0) {
+    console.log(`Missing required planets: ${missingPlanets.join(', ')}. Adding placeholders.`);
     
-    // Create dummy planets for testing - real values should come from the Swiss Ephemeris output
-    planets.sun = { name: 'Aries', symbol: '♈', longitude: 15, degree: 15 };
-    planets.moon = { name: 'Taurus', symbol: '♉', longitude: 45, degree: 15 };
-    planets.mercury = { name: 'Gemini', symbol: '♊', longitude: 75, degree: 15 };
-    planets.venus = { name: 'Cancer', symbol: '♋', longitude: 105, degree: 15 };
-    planets.mars = { name: 'Leo', symbol: '♌', longitude: 135, degree: 15 };
-    planets.jupiter = { name: 'Virgo', symbol: '♍', longitude: 165, degree: 15 };
-    planets.saturn = { name: 'Libra', symbol: '♎', longitude: 195, degree: 15 };
+    // Add default positions for missing planets
+    if (!planets.sun) planets.sun = { name: 'Aries', symbol: '♈', longitude: 15, degree: 15 };
+    if (!planets.moon) planets.moon = { name: 'Taurus', symbol: '♉', longitude: 45, degree: 15 };
+    if (!planets.mercury) planets.mercury = { name: 'Gemini', symbol: '♊', longitude: 75, degree: 15 };
+    if (!planets.venus) planets.venus = { name: 'Cancer', symbol: '♋', longitude: 105, degree: 15 };
+    if (!planets.mars) planets.mars = { name: 'Leo', symbol: '♌', longitude: 135, degree: 15 };
+    if (!planets.jupiter) planets.jupiter = { name: 'Virgo', symbol: '♍', longitude: 165, degree: 15 };
+    if (!planets.saturn) planets.saturn = { name: 'Libra', symbol: '♎', longitude: 195, degree: 15 };
+    if (!planets.uranus) planets.uranus = { name: 'Scorpio', symbol: '♏', longitude: 225, degree: 15 };
+    if (!planets.neptune) planets.neptune = { name: 'Sagittarius', symbol: '♐', longitude: 255, degree: 15 };
+    if (!planets.pluto) planets.pluto = { name: 'Capricorn', symbol: '♑', longitude: 285, degree: 15 };
+    if (!planets.trueNode) planets.trueNode = { name: 'Cancer', symbol: '☊', longitude: 105, degree: 15 };
+    if (!planets.midheaven) planets.midheaven = { name: 'Pisces', symbol: '♓', longitude: 350, degree: 20 };
     
     // Use sun for ascendant if not found
-    ascendant = planets.sun;
+    if (!ascendant || ascendant.longitude === 0) {
+      ascendant = planets.sun;
+    }
+  }
+  
+  // Add south node based on true node
+  if (planets.trueNode && !planets.southNode) {
+    const trueNodeLong = planets.trueNode.longitude;
+    const southNodeLong = (trueNodeLong + 180) % 360;
+    const southNodeSignIndex = Math.floor(southNodeLong / 30);
+    const southNodeDegree = southNodeLong % 30;
+    
+    planets.southNode = {
+      name: ZODIAC_SIGNS[southNodeSignIndex],
+      symbol: '☋',
+      longitude: southNodeLong,
+      degree: southNodeDegree
+    };
   }
   
   // Create default houses if none were found

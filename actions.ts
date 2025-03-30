@@ -654,6 +654,13 @@ export const calculateBirthChartWithSwissEph = async (params: {
     
     console.log('Birth chart calculated successfully');
     
+    // Log the chart data for debugging
+    console.log('Calculated birth chart data:', {
+      ascendant: formattedChartData.ascendant,
+      planets: Object.keys(formattedChartData.planets || {}),
+      houses: Object.keys(formattedChartData.houses || {})
+    });
+
     // Return the data to the client
     return {
       data: formattedChartData
