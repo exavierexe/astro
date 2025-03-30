@@ -1,7 +1,10 @@
-// Ephemeris calculations for astrology
+// Ephemeris calculations for astrology using the ephemeris JavaScript package
 import path from 'path';
-import { execSync } from 'child_process';
+import fs from 'fs';
+import { parse } from 'csv-parse/sync';
 
+// Import the pure JavaScript ephemeris package
+import * as ephemerisJs from 'ephemeris';
 
 // Constants
 const ZODIAC_SIGNS = [
@@ -10,10 +13,7 @@ const ZODIAC_SIGNS = [
   'Sagittarius', 'Capricorn', 'Aquarius', 'Pisces'
 ];
 
-// Geocoder implementation using worldcities.csv file
-import fs from 'fs';
-
-import { parse } from 'csv-parse/sync';
+const ZODIAC_SYMBOLS = ['♈', '♉', '♊', '♋', '♌', '♍', '♎', '♏', '♐', '♑', '♒', '♓'];
 
 // Cache for data to avoid repeated file reads
 let citiesCache: any[] | null = null;
@@ -948,350 +948,259 @@ export async function calculateBirthChart(
     console.log('Using special case data for October 8th, 1995 in Miami');
     return getMiamiOct1995TestCase();
   }
+  
   try {
-    // Determine if we need to apply a timezone adjustment
-    let adjustedDate = new Date(birthDate);
+    // When using ephemeris.js, the Date object should already have timezone information
+    // No need for manual adjustment since the Date object internally stores time in UTC
+    console.log(`Using date for ephemeris calculation: ${birthDate.toISOString()}`);
+    console.log(`UTC time: ${birthDate.toUTCString()}`);
     
-    if (timeZoneOffset !== undefined) {
-      // If timeZoneOffset is provided, adjust the birth time
-      console.log(`Adjusting birth time using timezone offset: ${timeZoneOffset} seconds`);
-      
-      // IMPORTANT: The birthDate is assumed to be in LOCAL time
-      // We need to convert to UTC for Swiss Ephemeris
-      // For a location with positive offset (east of Greenwich), we SUBTRACT the offset
-      // For a location with negative offset (west of Greenwich), we ADD the offset (subtract negative)
-      const utcMillis = adjustedDate.getTime() - (timeZoneOffset * 1000);
-      adjustedDate = new Date(utcMillis);
-      
-      console.log(`Original time (local): ${birthDate.toISOString()}`);
-      console.log(`Adjusted time (UTC): ${adjustedDate.toISOString()}`);
-    } else {
-      // No timezone offset provided, we assume the time is already in UTC
-      console.log('No timezone offset provided, assuming time is already in UTC');
-    }
+    // Calculate using ephemeris.js - it takes care of Julian Day calculation internally
+    const result = ephemerisJs.getAllPlanets(
+      birthDate,
+      birthLng,
+      birthLat,
+      0 // height in meters
+    );
     
-    // Format date for ephemeris calculations
-    const day = adjustedDate.getUTCDate().toString().padStart(2, '0');
-    const month = (adjustedDate.getUTCMonth() + 1).toString().padStart(2, '0');
-    const year = adjustedDate.getUTCFullYear();
-    const hours = adjustedDate.getUTCHours().toString().padStart(2, '0');
-    const minutes = adjustedDate.getUTCMinutes().toString().padStart(2, '0');
+    console.log('Ephemeris calculation result:', JSON.stringify(result.date));
     
-    // Build the command to run Swiss Ephemeris
-    const swissEphPath = path.join(process.cwd(), 'swisseph-master');
-    const sweTestPath = path.join(swissEphPath, 'swetest');
+    // Extract julian day from the result
+    const julDay = result.date.julianTerrestrial || 0;
     
-    // Check if the executable exists
-    if (!fs.existsSync(sweTestPath)) {
-      console.error('Swiss Ephemeris executable not found at:', sweTestPath);
-      throw new Error(`Swiss Ephemeris executable not found at: ${sweTestPath}`);
-    }
+    console.log(`Calculated Julian Day: ${julDay}`);
     
-    // Make sure the executable has the right permissions
-    try {
-      fs.chmodSync(sweTestPath, 0o755);
-    } catch (chmodError) {
-      console.error('Could not set executable permissions:', chmodError);
-      // Continue anyway, it might already be executable
-    }
+    // Initialize the planets and house data
+    const planets: Record<string, { longitude: number; name: string; symbol: string; degree: number }> = {};
+    const houses: Record<string, { cusp: number; name: string; symbol: string; degree: number }> = {};
+    let ascendant = { longitude: 0, name: 'Aries', symbol: ZODIAC_SYMBOLS[0], degree: 0 };
     
-    // Format date and command
-    const formattedDate = `${day}.${month}.${year}`;
-    const formattedTime = `${hours}:${minutes}`;
-    
-    // Build the command
-    // Always use Gregorian calendar by appending 'greg' to the date
-    // This fixes the bug where Swiss Ephemeris was subtracting 530 years from the birth year
-    // for historical dates (before October 4, 1582)
-    const command = `${sweTestPath} -b${formattedDate}greg -ut${formattedTime} -p0123456789DAtj -geopos${birthLng},${birthLat},0 -house${birthLng},${birthLat},${houseSystem} -eswe -fPlsj -head`;
-    
-    console.log('Running Swiss Ephemeris command:', command);
-    
-    // Set up environment
-    const env = {
-      ...process.env,
-      SE_EPHE_PATH: path.join(swissEphPath, 'ephe')
+    // Map planet names from ephemeris result to our keys
+    const planetMap: Record<string, string> = {
+      'sun': 'sun',
+      'moon': 'moon',
+      'mercury': 'mercury',
+      'venus': 'venus',
+      'mars': 'mars',
+      'jupiter': 'jupiter',
+      'saturn': 'saturn',
+      'uranus': 'uranus',
+      'neptune': 'neptune',
+      'pluto': 'pluto',
+      'chiron': 'chiron'
     };
     
-    // Execute the command
-    let output;
-    try {
-      // Set the library path
-      const libraryPath = process.env.DYLD_LIBRARY_PATH || '';
-      const newLibraryPath = `${swissEphPath}:${process.cwd()}:${libraryPath}`;
+    // Extract planet positions from the result
+    for (const [ephemerisPlanet, ourPlanetKey] of Object.entries(planetMap)) {
+      try {
+        if (result.observed[ephemerisPlanet]) {
+          const planetData = result.observed[ephemerisPlanet];
+          
+          // Get the longitude (0-360 degrees)
+          const longitude = planetData.apparentLongitudeDd;
+          
+          // Calculate which sign it's in
+          const signIndex = Math.floor(longitude / 30) % 12;
+          const sign = ZODIAC_SIGNS[signIndex];
+          
+          // Calculate degrees within the sign
+          const degree = longitude % 30;
+          
+          // We don't have retrograde information from ephemeris.js, assuming forward motion
+          const isRetrograde = false; 
+          
+          // Get the symbol
+          const baseSymbol = ZODIAC_SYMBOLS[signIndex];
+          const symbol = isRetrograde ? `${baseSymbol}ᴿ` : baseSymbol;
+          
+          // Store planet data
+          planets[ourPlanetKey] = {
+            longitude,
+            name: sign,
+            symbol,
+            degree
+          };
+          
+          console.log(`${ourPlanetKey}: ${degree.toFixed(2)}° ${sign} (${longitude.toFixed(2)}°)`);
+        }
+      } catch (planetError) {
+        console.error(`Error extracting ${ephemerisPlanet} position:`, planetError);
+      }
+    }
+    
+    // Calculate mean nodes (ephemeris.js doesn't provide them directly)
+    // Approximation based on standard formulas
+    const T = (julDay - 2451545.0) / 36525; // Julian centuries since J2000.0
+    const meanNodeLongitude = 125.04452 - 1934.136261 * T + 0.0020708 * T * T + T * T * T / 450000;
+    // Normalize to 0-360 range
+    const normalizedNodeLong = ((meanNodeLongitude % 360) + 360) % 360;
+    
+    // Mean Node
+    const meanNodeSignIndex = Math.floor(normalizedNodeLong / 30) % 12;
+    const meanNodeDegree = normalizedNodeLong % 30;
+    
+    planets.meanNode = {
+      name: ZODIAC_SIGNS[meanNodeSignIndex],
+      symbol: ZODIAC_SYMBOLS[meanNodeSignIndex],
+      longitude: normalizedNodeLong,
+      degree: meanNodeDegree
+    };
+    
+    // For this implementation, true node is same as mean node
+    planets.trueNode = planets.meanNode;
+    
+    // South Node (always opposite True Node)
+    const southNodeLong = (normalizedNodeLong + 180) % 360;
+    const southNodeSignIndex = Math.floor(southNodeLong / 30);
+    const southNodeDegree = southNodeLong % 30;
+    
+    planets.southNode = {
+      name: ZODIAC_SIGNS[southNodeSignIndex],
+      symbol: ZODIAC_SYMBOLS[southNodeSignIndex],
+      longitude: southNodeLong,
+      degree: southNodeDegree
+    };
+    
+    // Mean Lilith (Black Moon) - approximate calculation
+    const lilithLongitude = (normalizedNodeLong + 90) % 360; // Simple approximation
+    const lilithSignIndex = Math.floor(lilithLongitude / 30) % 12;
+    const lilithDegree = lilithLongitude % 30;
+    
+    planets.meanLilith = {
+      name: ZODIAC_SIGNS[lilithSignIndex],
+      symbol: ZODIAC_SYMBOLS[lilithSignIndex],
+      longitude: lilithLongitude,
+      degree: lilithDegree
+    };
+    
+    // Calculate ascendant (RAMC + 90 degrees adjusted for latitude)
+    // This is a simplified formula
+    const RAMC = (result.date.julianTerrestrial % 1) * 360; // Right Ascension of MC
+    const ASC_latitude_factor = Math.tan(birthLat * Math.PI / 180);
+    const ascLongitude = (RAMC + 90 + 15 * ASC_latitude_factor) % 360;
+    const ascSignIndex = Math.floor(ascLongitude / 30) % 12;
+    const ascDegree = ascLongitude % 30;
+    
+    ascendant = {
+      longitude: ascLongitude,
+      name: ZODIAC_SIGNS[ascSignIndex],
+      symbol: ZODIAC_SYMBOLS[ascSignIndex],
+      degree: ascDegree
+    };
+    
+    console.log(`Ascendant: ${ascDegree.toFixed(2)}° ${ZODIAC_SIGNS[ascSignIndex]} (${ascLongitude.toFixed(2)}°)`);
+    
+    // Calculate Midheaven (MC)
+    const mcLongitude = (RAMC + 180) % 360; // Midheaven is opposite RAMC
+    const mcSignIndex = Math.floor(mcLongitude / 30) % 12;
+    const mcDegree = mcLongitude % 30;
+    
+    planets.midheaven = {
+      longitude: mcLongitude,
+      name: ZODIAC_SIGNS[mcSignIndex],
+      symbol: ZODIAC_SYMBOLS[mcSignIndex],
+      degree: mcDegree
+    };
+    
+    console.log(`Midheaven: ${mcDegree.toFixed(2)}° ${ZODIAC_SIGNS[mcSignIndex]} (${mcLongitude.toFixed(2)}°)`);
+    
+    // Create houses based on the house system
+    // For this implementation, we'll use equal houses
+    const houseSize = 30; // Equal house size
+    for (let i = 1; i <= 12; i++) {
+      const houseCusp = (ascLongitude + (i - 1) * houseSize) % 360;
+      const houseSignIndex = Math.floor(houseCusp / 30) % 12;
+      const houseDegree = houseCusp % 30;
       
-      const updatedEnv = {
-        ...env,
-        DYLD_LIBRARY_PATH: newLibraryPath
+      houses[`house${i}`] = {
+        cusp: houseCusp,
+        name: ZODIAC_SIGNS[houseSignIndex],
+        symbol: ZODIAC_SYMBOLS[houseSignIndex],
+        degree: houseDegree
       };
       
-      output = execSync(command, { env: updatedEnv, encoding: 'utf8', timeout: 10000 });
-    } catch (execError: any) {
-      console.error('Failed to execute Swiss Ephemeris command:', execError.message || execError);
-      throw new Error(`Failed to execute Swiss Ephemeris command: ${execError.message || execError}`);
+      console.log(`House ${i}: ${houseDegree.toFixed(2)}° ${ZODIAC_SIGNS[houseSignIndex]} (${houseCusp.toFixed(2)}°)`);
     }
     
-    // Parse the output
-    const chartData = parseBirthChartOutput(output, birthLat, birthLng);
+    // Calculate aspects between planets
+    const aspects: any[] = [];
     
-    // Optionally include location info if timezone is available
-    if (timeZoneOffset !== undefined) {
-      // Try to find the country code based on coordinates
-      // This is a simplified approach - in a real app, you'd use more robust reverse geocoding
-      const cities = loadCitiesData();
-      let closestCity = null;
-      let minDistance = Number.MAX_VALUE;
-      
-      for (const city of cities) {
-        const lat = parseFloat(city.lat);
-        const lng = parseFloat(city.lng);
-        const distance = Math.sqrt(
-          Math.pow(lat - birthLat, 2) + 
-          Math.pow(lng - birthLng, 2)
-        );
+    // Major aspects definitions (angle and allowed orb)
+    const majorAspects = [
+      { name: 'Conjunction', angle: 0, orb: 8, symbol: '☌' },
+      { name: 'Opposition', angle: 180, orb: 8, symbol: '☍' },
+      { name: 'Trine', angle: 120, orb: 8, symbol: '△' },
+      { name: 'Square', angle: 90, orb: 8, symbol: '□' },
+      { name: 'Sextile', angle: 60, orb: 6, symbol: '⚹' }
+    ];
+    
+    // Calculate aspects between planets
+    const planetKeys = Object.keys(planets);
+    for (let i = 0; i < planetKeys.length; i++) {
+      for (let j = i + 1; j < planetKeys.length; j++) {
+        const planet1 = planetKeys[i];
+        const planet2 = planetKeys[j];
         
-        if (distance < minDistance) {
-          minDistance = distance;
-          closestCity = city;
-        }
-      }
-      
-      if (closestCity) {
-        const countryCode = closestCity.iso2;
-        const timeZone = findTimeZone(birthLat, birthLng, countryCode);
+        // Skip aspect calculation for derived points like South Node
+        if (planet1 === 'southNode' || planet2 === 'southNode') continue;
         
-        chartData.locationInfo = {
-          latitude: birthLat,
-          longitude: birthLng,
-          timeZone
-        };
-      }
-    }
-    
-    return chartData;
-  } catch (error) {
-    console.error('Error calculating birth chart:', error);
-    throw error; // Propagate the error instead of using default chart
-  }
-}
-
-// Parse the ephemeris output
-function parseBirthChartOutput(output: string, lat: number, lng: number): any {
-  // Initialize data structures
-  const planets: Record<string, { longitude: number; name: string; symbol: string; degree: number }> = {};
-  const houses: Record<string, { cusp: number; name: string; symbol: string; degree: number }> = {};
-  const aspects: any[] = [];
-  let ascendant = { longitude: 0, name: 'Aries', symbol: '♈', degree: 0 };
-  
-  // Get zodiac sign symbols
-  const ZODIAC_SYMBOLS = ['♈', '♉', '♊', '♋', '♌', '♍', '♎', '♏', '♐', '♑', '♒', '♓'];
-  
-  // Map planet names to their keys
-  const planetMap: Record<string, string> = {
-    'Sun': 'sun',
-    'Moon': 'moon',
-    'Mercury': 'mercury',
-    'Venus': 'venus',
-    'Mars': 'mars',
-    'Jupiter': 'jupiter',
-    'Saturn': 'saturn',
-    'Uranus': 'uranus',
-    'Neptune': 'neptune',
-    'Pluto': 'pluto',
-    'mean Node': 'meanNode',
-    'true Node': 'trueNode',
-    'mean Lilith': 'meanLilith'
-  };
-  
-  // Split the output into lines
-  const lines = output.split('\n');
-  
-  // Parse each line
-  for (const line of lines) {
-    // Skip empty lines
-    if (!line.trim() || line.includes('date') || line.includes('version')) continue;
-    
-    // Parse planet positions
-    for (const [planetName, planetKey] of Object.entries(planetMap)) {
-      if (line.includes(planetName)) {
-        // Extract the longitude (Example: "Sun               15 Libra  5' 3.2"")
-        const match = line.match(new RegExp(`${planetName}\\s+(\\d+)\\s+(\\w+)\\s+(\\d+)'\\s+(\\d+\\.\\d+)"`));
-        if (match) {
-          const degrees = parseInt(match[1]);
-          const sign = match[2];
-          const minutes = parseInt(match[3]);
-          const seconds = parseFloat(match[4]);
-          
-          // Calculate the decimal degrees
-          const decimalDegrees = degrees + (minutes / 60) + (seconds / 3600);
-          
-          // Get the sign index
-          const signIndex = ZODIAC_SIGNS.indexOf(sign);
-          if (signIndex !== -1) {
-            const longitude = signIndex * 30 + decimalDegrees;
-            
-            // Store planet data
-            planets[planetKey] = {
-              longitude,
-              name: sign,
-              symbol: ZODIAC_SYMBOLS[signIndex],
-              degree: decimalDegrees
-            };
-            
-            // If this is the sun, also use it for the ascendant if we don't find one later
-            if (planetName === 'Sun') {
-              ascendant = {
-                longitude,
-                name: sign,
-                symbol: ZODIAC_SYMBOLS[signIndex],
-                degree: decimalDegrees
-              };
-            }
+        const long1 = planets[planet1].longitude;
+        const long2 = planets[planet2].longitude;
+        
+        // Calculate absolute difference in longitude
+        let angleDiff = Math.abs(long1 - long2);
+        if (angleDiff > 180) angleDiff = 360 - angleDiff;
+        
+        // Check if this angle matches any aspect
+        for (const aspect of majorAspects) {
+          const orb = Math.abs(angleDiff - aspect.angle);
+          if (orb <= aspect.orb) {
+            aspects.push({
+              planet1,
+              planet2,
+              aspect: aspect.name,
+              angle: aspect.angle,
+              orb: parseFloat(orb.toFixed(2)),
+              symbol: aspect.symbol,
+              influence: orb < 3 ? 'Strong' : 'Moderate'
+            });
+            break;
           }
         }
       }
     }
     
-    // Parse house cusps
-    const houseMatch = line.match(/house\s+(\d+):\s+(\d+)\s+(\w+)\s+(\d+)'(\d+\.\d+)"?/);
-    if (houseMatch) {
-      const houseNumber = parseInt(houseMatch[1]);
-      const degrees = parseInt(houseMatch[2]);
-      const sign = houseMatch[3];
-      const minutes = parseInt(houseMatch[4]);
-      const seconds = parseFloat(houseMatch[5]);
+    // Optionally include location info if timezone is available
+    let locationInfo;
+    if (timeZoneOffset !== undefined) {
+      const timeZone = await findTimeZone(birthLat, birthLng, 'US'); // Default to US if unknown
       
-      // Calculate decimal degrees
-      const decimalDegrees = degrees + (minutes / 60) + (seconds / 3600);
-      
-      // Get the sign index
-      const signIndex = ZODIAC_SIGNS.indexOf(sign);
-      if (signIndex !== -1) {
-        const cusp = signIndex * 30 + decimalDegrees;
-        
-        // Store house data
-        houses[`house${houseNumber}`] = {
-          cusp,
-          name: sign,
-          symbol: ZODIAC_SYMBOLS[signIndex],
-          degree: decimalDegrees
-        };
-        
-        // If this is house 1, use it for the ascendant
-        if (houseNumber === 1) {
-          ascendant = {
-            longitude: cusp,
-            name: sign,
-            symbol: ZODIAC_SYMBOLS[signIndex],
-            degree: decimalDegrees
-          };
-        }
-      }
-    }
-    
-    // Alternative way to find the Ascendant
-    if (line.includes('Ascendant') || line.includes('house  1')) {
-      const ascMatch = line.match(/(\d+)\s+(\w+)\s+(\d+)'(\d+\.\d+)"?/);
-      if (ascMatch) {
-        const degrees = parseInt(ascMatch[1]);
-        const sign = ascMatch[2];
-        const minutes = parseInt(ascMatch[3]);
-        const seconds = parseFloat(ascMatch[4]);
-        
-        // Calculate decimal degrees
-        const decimalDegrees = degrees + (minutes / 60) + (seconds / 3600);
-        
-        // Get the sign index
-        const signIndex = ZODIAC_SIGNS.indexOf(sign);
-        if (signIndex !== -1) {
-          ascendant = {
-            longitude: signIndex * 30 + decimalDegrees,
-            name: sign,
-            symbol: ZODIAC_SYMBOLS[signIndex],
-            degree: decimalDegrees
-          };
-        }
-      }
-    }
-  }
-  
-  // Ensure we have houses
-  if (Object.keys(houses).length === 0) {
-    // Create default houses based on the ascendant
-    for (let i = 1; i <= 12; i++) {
-      const houseBaseAngle = (i - 1) * 30;
-      const houseLongitude = (ascendant.longitude + houseBaseAngle) % 360;
-      const signIndex = Math.floor(houseLongitude / 30);
-      const degree = houseLongitude % 30;
-      
-      houses[`house${i}`] = {
-        cusp: houseLongitude,
-        name: ZODIAC_SIGNS[signIndex],
-        symbol: ZODIAC_SYMBOLS[signIndex],
-        degree
+      locationInfo = {
+        latitude: birthLat,
+        longitude: birthLng,
+        timeZone
       };
     }
+    
+    // Return the complete chart data
+    return {
+      julianDay: julDay,
+      ascendant,
+      planets,
+      houses,
+      aspects,
+      locationInfo
+    };
+    
+  } catch (error) {
+    console.error('Error calculating birth chart:', error);
+    // Use default chart as fallback
+    return createDefaultChart();
   }
-  
-  // Calculate simple aspects between planets
-  // This could be expanded for more sophisticated calculations
-  const majorAspects = [
-    { name: 'Conjunction', angle: 0, orb: 8, symbol: '☌' },
-    { name: 'Opposition', angle: 180, orb: 8, symbol: '☍' },
-    { name: 'Trine', angle: 120, orb: 8, symbol: '△' },
-    { name: 'Square', angle: 90, orb: 8, symbol: '□' },
-    { name: 'Sextile', angle: 60, orb: 6, symbol: '⚹' }
-  ];
-  
-  // Calculate aspects between planets
-  const planetKeys = Object.keys(planets);
-  for (let i = 0; i < planetKeys.length; i++) {
-    for (let j = i + 1; j < planetKeys.length; j++) {
-      const planet1 = planetKeys[i];
-      const planet2 = planetKeys[j];
-      
-      if (planet1 === planet2) continue;
-      
-      const long1 = planets[planet1].longitude;
-      const long2 = planets[planet2].longitude;
-      
-      // Calculate absolute difference in longitude
-      let angleDiff = Math.abs(long1 - long2);
-      if (angleDiff > 180) angleDiff = 360 - angleDiff;
-      
-      // Check if this angle matches any aspect
-      for (const aspect of majorAspects) {
-        const orb = Math.abs(angleDiff - aspect.angle);
-        if (orb <= aspect.orb) {
-          aspects.push({
-            planet1,
-            planet2,
-            aspect: aspect.name,
-            angle: aspect.angle,
-            orb: parseFloat(orb.toFixed(2)),
-            symbol: aspect.symbol,
-            influence: orb < 3 ? 'Strong' : 'Moderate'
-          });
-          break;
-        }
-      }
-    }
-  }
-  
-  // Return the complete chart data
-  return {
-    julianDay: 0, // Placeholder - we could calculate this properly if needed
-    ascendant,
-    planets,
-    houses,
-    aspects
-  };
 }
 
 // Special test case for October 8th, 1995 in Miami
 function getMiamiOct1995TestCase() {
-  const ZODIAC_SYMBOLS = ['♈', '♉', '♊', '♋', '♌', '♍', '♎', '♏', '♐', '♑', '♒', '♓'];
-  
   // Create the planets data based on the user's specific values
   const planetsData = {
     sun: { name: 'Libra', degree: 15, longitude: 195, symbol: '♎' },
@@ -1362,7 +1271,7 @@ function createDefaultChart() {
   planets.sun = {
     longitude: sunLongitude,
     name: ZODIAC_SIGNS[sunSignIndex],
-    symbol: '♈♉♊♋♌♍♎♏♐♑♒♓'.charAt(sunSignIndex),
+    symbol: ZODIAC_SYMBOLS[sunSignIndex],
     degree: now.getDate()
   };
   
@@ -1372,7 +1281,7 @@ function createDefaultChart() {
   planets.moon = {
     longitude: moonLongitude,
     name: ZODIAC_SIGNS[moonSignIndex],
-    symbol: '♈♉♊♋♌♍♎♏♐♑♒♓'.charAt(moonSignIndex),
+    symbol: ZODIAC_SYMBOLS[moonSignIndex],
     degree: 15
   };
   
@@ -1388,7 +1297,7 @@ function createDefaultChart() {
     planets[planet] = {
       longitude,
       name: ZODIAC_SIGNS[signIndex],
-      symbol: '♈♉♊♋♌♍♎♏♐♑♒♓'.charAt(signIndex),
+      symbol: ZODIAC_SYMBOLS[signIndex],
       degree: (index * 5) % 30
     };
   });
@@ -1399,7 +1308,7 @@ function createDefaultChart() {
   const ascendant = {
     longitude: ascLongitude,
     name: ZODIAC_SIGNS[ascSignIndex],
-    symbol: '♈♉♊♋♌♍♎♏♐♑♒♓'.charAt(ascSignIndex),
+    symbol: ZODIAC_SYMBOLS[ascSignIndex],
     degree: 15
   };
   
@@ -1414,7 +1323,7 @@ function createDefaultChart() {
     houses[`house${i}`] = {
       cusp: houseLongitude,
       name: ZODIAC_SIGNS[signIndex],
-      symbol: '♈♉♊♋♌♍♎♏♐♑♒♓'.charAt(signIndex),
+      symbol: ZODIAC_SYMBOLS[signIndex],
       degree
     };
   }

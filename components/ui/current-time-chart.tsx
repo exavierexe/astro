@@ -33,7 +33,7 @@ export function CurrentTimeChart() {
   // State for user's location
   const [userLocation, setUserLocation] = useState<string | null>(null);
   
-  // Function to parse the Swiss Ephemeris output
+  // Function to parse the JavaScript Ephemeris output
   const parseSwissEphOutput = (output: string): ChartData => {
     // This is a simplified version - the full parser is in the swisseph page
     const planets: Record<string, any> = {};
@@ -59,10 +59,10 @@ export function CurrentTimeChart() {
       'Uranus': 'uranus',
       'Neptune': 'neptune',
       'Pluto': 'pluto',
+      'Mean Node': 'meanNode', 
+      'True Node': 'trueNode',
       'Ascendant': 'ascendant',
-      'true Node': 'trueNode',
-      'MC': 'midheaven',
-      'Medium Coeli': 'midheaven'
+      'Midheaven': 'midheaven'
     };
     
     // Extract planet positions
@@ -71,43 +71,102 @@ export function CurrentTimeChart() {
       // Skip empty lines
       if (!line.trim()) continue;
       
-      // Check for planet data
+      // Check for planet data - with the new JavaScript Ephemeris output format
+      // Format example: "Sun         15° Libra 5' 3.1""
       for (const [planetName, planetKey] of Object.entries(planetMap)) {
-        if (line.includes(planetName)) {
-          const match = line.match(/(\d+\.\d+)/);
+        if (line.startsWith(planetName)) {
+          // Match format like: "15° Libra 5' 3.1"" 
+          const match = line.match(/(\d+)°\s+(\w+)\s+(\d+)'\s+(\d+\.?\d*)"/);
           if (match) {
-            const longitude = parseFloat(match[1]);
-            const signIndex = Math.floor(longitude / 30) % 12;
-            const degreeInSign = longitude % 30;
+            const degrees = parseInt(match[1]);
+            const signName = match[2];
+            const minutes = parseInt(match[3]);
+            const seconds = parseFloat(match[4]);
             
-            planets[planetKey] = {
-              name: ZODIAC_SIGNS[signIndex],
-              symbol: '',
-              longitude,
-              degree: degreeInSign
-            };
-            
-            // If this is the Ascendant, store it separately
-            if (planetName === 'Ascendant') {
-              ascendant = planets[planetKey];
+            // Find the sign index
+            const signIndex = ZODIAC_SIGNS.findIndex(s => s === signName);
+            if (signIndex !== -1) {
+              // Calculate precise degree within the sign
+              const degreeInSign = degrees + (minutes / 60) + (seconds / 3600);
+              // Calculate total longitude
+              const longitude = signIndex * 30 + degreeInSign;
+              
+              planets[planetKey] = {
+                name: signName,
+                symbol: '',
+                longitude,
+                degree: degreeInSign
+              };
+              
+              // If this is the Ascendant, store it separately
+              if (planetName === 'Ascendant') {
+                ascendant = planets[planetKey];
+              }
+            }
+          } else {
+            // Try alternative format - sometimes format might vary
+            const altMatch = line.match(/(\d+\.\d+)/);
+            if (altMatch) {
+              const longitude = parseFloat(altMatch[1]);
+              const signIndex = Math.floor(longitude / 30) % 12;
+              const degreeInSign = longitude % 30;
+              
+              planets[planetKey] = {
+                name: ZODIAC_SIGNS[signIndex],
+                symbol: '',
+                longitude,
+                degree: degreeInSign
+              };
+              
+              // If this is the Ascendant, store it separately
+              if (planetName === 'Ascendant') {
+                ascendant = planets[planetKey];
+              }
             }
           }
         }
       }
       
       // Check for house cusps
-      const houseMatch = line.match(/house\s+(\d+):\s+(\d+\.\d+)/);
+      // Format example: "house 1     15° Libra 5' 3.1""
+      const houseMatch = line.match(/house\s+(\d+)\s+(\d+)°\s+(\w+)\s+(\d+)'\s+(\d+\.?\d*)"/);
       if (houseMatch) {
         const houseNumber = parseInt(houseMatch[1]);
-        const cusp = parseFloat(houseMatch[2]);
-        const signIndex = Math.floor(cusp / 30) % 12;
+        const degrees = parseInt(houseMatch[2]);
+        const signName = houseMatch[3];
+        const minutes = parseInt(houseMatch[4]);
+        const seconds = parseFloat(houseMatch[5]);
         
-        houses[`house${houseNumber}`] = {
-          cusp,
-          name: ZODIAC_SIGNS[signIndex],
-          symbol: '',
-          degree: cusp % 30
-        };
+        // Find the sign index
+        const signIndex = ZODIAC_SIGNS.findIndex(s => s === signName);
+        if (signIndex !== -1) {
+          // Calculate precise degree within the sign
+          const degreeInSign = degrees + (minutes / 60) + (seconds / 3600);
+          // Calculate total cusp value
+          const cusp = signIndex * 30 + degreeInSign;
+          
+          houses[`house${houseNumber}`] = {
+            cusp,
+            name: signName,
+            symbol: '',
+            degree: degreeInSign
+          };
+        }
+      } else {
+        // Try alternative format
+        const altHouseMatch = line.match(/house\s+(\d+):\s+(\d+\.\d+)/);
+        if (altHouseMatch) {
+          const houseNumber = parseInt(altHouseMatch[1]);
+          const cusp = parseFloat(altHouseMatch[2]);
+          const signIndex = Math.floor(cusp / 30) % 12;
+          
+          houses[`house${houseNumber}`] = {
+            cusp,
+            name: ZODIAC_SIGNS[signIndex],
+            symbol: '',
+            degree: cusp % 30
+          };
+        }
       }
     }
     
@@ -321,10 +380,20 @@ export function CurrentTimeChart() {
           }
         }
 
-        // Find the command and output sections
-        const commandMatch = chartData.rawOutput.match(/---- SWISS EPHEMERIS OUTPUT ----\n([\s\S]*)/);
-        if (commandMatch && commandMatch[1]) {
-          setEphemerisOutput(commandMatch[1].trim());
+        // Find the output section - using the JavaScript Ephemeris marker
+        const outputMatch = chartData.rawOutput.match(/---- JAVASCRIPT EPHEMERIS OUTPUT ----\n([\s\S]*)/);
+        if (outputMatch && outputMatch[1]) {
+          // We found the JavaScript Ephemeris output section
+          setEphemerisOutput(outputMatch[1].trim());
+        } else {
+          // Fallback: try to extract the planets section
+          const planetsSectionMatch = chartData.rawOutput.match(/Planets:\n([\s\S]*?)(?:\n\n|$)/);
+          if (planetsSectionMatch && planetsSectionMatch[1]) {
+            setEphemerisOutput(planetsSectionMatch[1].trim());
+          } else {
+            // Just use the whole output if we can't identify sections
+            setEphemerisOutput(chartData.rawOutput);
+          }
         }
       }
 
@@ -407,12 +476,12 @@ export function CurrentTimeChart() {
         </div>
         
         <div className="mt-4">
-          <h4 className="font-semibold mb-1 border-b border-gray-700 pb-1">Swiss Ephemeris Command</h4>
+          <h4 className="font-semibold mb-1 border-b border-gray-700 pb-1">Ephemeris Command</h4>
           <pre className="bg-black/30 p-3 rounded text-xs overflow-x-auto mb-4">
             {locationDetails.command !== 'Unknown' ? locationDetails.command : 'Command not available'}
           </pre>
           
-          <h4 className="font-semibold mb-1 border-b border-gray-700 pb-1">Swiss Ephemeris Output</h4>
+          <h4 className="font-semibold mb-1 border-b border-gray-700 pb-1">Ephemeris Output</h4>
           <pre className="bg-black/30 p-3 rounded text-xs overflow-x-auto max-h-32 overflow-y-auto">
             {ephemerisOutput || 'No output data available'}
           </pre>

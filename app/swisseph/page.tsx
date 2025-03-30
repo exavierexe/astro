@@ -12,7 +12,7 @@ import { querySwissEph, saveBirthChart, getBirthChartById, getDefaultChart } fro
 import { ZodiacWheel, type ChartData, exportChartAsImage } from '@/components/ui/zodiacwheel'
 import { SavedBirthCharts } from '@/components/ui/birth-chart-calculator'
 
-// Helper function to parse Swiss Ephemeris output into chart data
+// Helper function to parse JavaScript Ephemeris output into chart data
 function parseSwissEphOutput(output: string): ChartData {
   if (!output) {
     // Return default chart data if no output
@@ -52,7 +52,7 @@ function parseSwissEphOutput(output: string): ChartData {
   ];
   const ZODIAC_SYMBOLS = ['♈', '♉', '♊', '♋', '♌', '♍', '♎', '♏', '♐', '♑', '♒', '♓'];
   
-  // Map planet identifiers in Swiss Ephemeris output to our keys
+  // Map planet identifiers in ephemeris output to our keys
   const planetMap: Record<string, string> = {
     'Sun': 'sun',
     'Moon': 'moon',
@@ -64,8 +64,8 @@ function parseSwissEphOutput(output: string): ChartData {
     'Uranus': 'uranus',
     'Neptune': 'neptune',
     'Pluto': 'pluto',
-    'mean Node': 'meanNode',
-    'true Node': 'trueNode',
+    'Mean Node': 'meanNode',
+    'True Node': 'trueNode',
     'Node': 'meanNode',            // Alternative name
     'mean Lilith': 'meanLilith',
     'osc. Lilith': 'oscLilith',    // Oscillating Lilith
@@ -77,15 +77,18 @@ function parseSwissEphOutput(output: string): ChartData {
     'Vesta': 'vesta',
     'Ascendant': 'ascendant', 
     'Asc': 'ascendant',            // Alternative name for Ascendant
-    'MC': 'midheaven',             // Midheaven
-    'Medium Coeli': 'midheaven'    // Full name for Midheaven
+    'Midheaven': 'midheaven',      // Midheaven
+    'MC': 'midheaven'              // Alternative name for Midheaven
   };
   
   // Parse the output line by line
   const lines = output.split('\n');
   
   // Debug the raw output
-  console.log("Raw Swiss Ephemeris output:", output);
+  console.log("Raw Ephemeris output:", output);
+  
+  // Check if we have the new JavaScript Ephemeris output format
+  const isJavaScriptEphemeris = output.includes('---- JAVASCRIPT EPHEMERIS OUTPUT ----');
   
   // Extract planet positions
   for (const line of lines) {
@@ -95,156 +98,277 @@ function parseSwissEphOutput(output: string): ChartData {
     // Debug each line
     console.log("Processing line:", line);
     
-    // Check if the line contains planet data with absolute degrees and motion
-    // Format: "Sun              195.2253469   0.9869944   6.9210360"
-    for (const [planetName, planetKey] of Object.entries(planetMap)) {
-      if (line.startsWith(planetName)) {
-        // Extract the absolute degree and motion values
-        // Format: "Sun              195.2253469   0.9869944   6.9210360"
-        // We need to extract the first number (absolute degree) and second number (motion)
-        const pattern = new RegExp(`${planetName}\\s+(\\d+\\.\\d+)\\s+([\\-\\+]?\\d+\\.\\d+)`);
-        
-        // Alternative pattern if there are more spaces than expected
-        const alternativePattern = new RegExp(`${planetName}\\s+([\\d\\.]+)\\s+([\\-\\+]?[\\d\\.]+)`);
-        
-        let match = line.match(pattern);
-        if (!match) {
-          match = line.match(alternativePattern);
+    // Check for planet data in the new JavaScript Ephemeris format
+    // Format: "Sun         15° Libra 5' 3.1""
+    if (isJavaScriptEphemeris) {
+      for (const [planetName, planetKey] of Object.entries(planetMap)) {
+        if (line.startsWith(planetName)) {
+          // Match degrees, sign, minutes, seconds format
+          // Format: "Sun         15° Libra 5' 3.1""
+          const degreeMatch = line.match(/(\d+)°\s+(\w+)\s+(\d+)'\s+(\d+\.?\d*)"/);
+          
+          if (degreeMatch) {
+            console.log(`Found planet ${planetName} with data:`, degreeMatch);
+            
+            const degrees = parseInt(degreeMatch[1]);
+            const signName = degreeMatch[2];
+            const minutes = parseInt(degreeMatch[3]);
+            const seconds = parseFloat(degreeMatch[4]);
+            
+            // Find the sign index
+            const signIndex = ZODIAC_SIGNS.findIndex(s => s === signName);
+            if (signIndex !== -1) {
+              // Calculate precise degree within the sign
+              const degreeInSign = degrees + (minutes / 60) + (seconds / 3600);
+              // Calculate total longitude
+              const absoluteDegree = signIndex * 30 + degreeInSign;
+              
+              // Check for retrograde symbol
+              const isRetrograde = line.includes('R');
+              
+              // Create symbol with retrograde indicator if needed
+              const baseSymbol = ZODIAC_SYMBOLS[signIndex];
+              const symbol = isRetrograde ? `${baseSymbol}ᴿ` : baseSymbol;
+              
+              planets[planetKey] = {
+                name: signName,
+                symbol: symbol,
+                longitude: absoluteDegree,
+                degree: degreeInSign
+              };
+              
+              console.log(`Parsed ${planetName} at ${absoluteDegree}° (${degreeInSign}° ${signName}), retrograde: ${isRetrograde}`);
+              
+              // If this is the Ascendant, store it separately
+              if (planetName === 'Ascendant') {
+                ascendant = planets[planetKey];
+              }
+            }
+          } else {
+            // Try older absolute degree format as fallback
+            const absoluteDegreeMatch = line.match(/(\d+\.\d+)/);
+            if (absoluteDegreeMatch) {
+              const absoluteDegree = parseFloat(absoluteDegreeMatch[1]);
+              const signIndex = Math.floor(absoluteDegree / 30) % 12;
+              const sign = ZODIAC_SIGNS[signIndex];
+              const degreeInSign = absoluteDegree % 30;
+              
+              // Check for retrograde symbol
+              const isRetrograde = line.includes('R');
+              
+              // Create symbol with retrograde indicator if needed
+              const baseSymbol = ZODIAC_SYMBOLS[signIndex];
+              const symbol = isRetrograde ? `${baseSymbol}ᴿ` : baseSymbol;
+              
+              planets[planetKey] = {
+                name: sign,
+                symbol: symbol,
+                longitude: absoluteDegree,
+                degree: degreeInSign
+              };
+              
+              console.log(`Parsed ${planetName} at ${absoluteDegree}° (${degreeInSign}° ${sign}), retrograde: ${isRetrograde}`);
+              
+              // If this is the Ascendant, store it separately
+              if (planetName === 'Ascendant') {
+                ascendant = planets[planetKey];
+              }
+            } else {
+              console.log(`Could not match pattern for ${planetName} in line: ${line}`);
+            }
+          }
         }
+      }
+      
+      // Check for house cusps in the new format
+      // Format: "house 1     15° Libra 5' 3.1""
+      const houseMatch = line.match(/house\s+(\d+)\s+(\d+)°\s+(\w+)\s+(\d+)'\s+(\d+\.?\d*)"/);
+      if (houseMatch) {
+        const houseNumber = parseInt(houseMatch[1]);
+        const degrees = parseInt(houseMatch[2]);
+        const signName = houseMatch[3];
+        const minutes = parseInt(houseMatch[4]);
+        const seconds = parseFloat(houseMatch[5]);
         
-        if (match) {
-          console.log(`Found planet ${planetName} with data:`, match);
+        // Find the sign index
+        const signIndex = ZODIAC_SIGNS.findIndex(s => s === signName);
+        if (signIndex !== -1) {
+          // Calculate precise degree within the sign
+          const degreeInSign = degrees + (minutes / 60) + (seconds / 3600);
+          // Calculate total longitude
+          const absoluteDegree = signIndex * 30 + degreeInSign;
           
-          // Parse the absolute degree (e.g., 195.2253469)
-          const absoluteDegree = parseFloat(match[1]);
-          
-          // Parse the motion value (positive = direct, negative = retrograde)
-          const motion = parseFloat(match[2]);
-          const isRetrograde = motion < 0;
-          
-          // Calculate which sign the degree falls in (each sign is 30 degrees)
-          const signIndex = Math.floor(absoluteDegree / 30) % 12;
-          const sign = ZODIAC_SIGNS[signIndex];
-          
-          // Calculate degree within that sign
-          const degreeInSign = absoluteDegree % 30;
-          
-          // Add retrograde indicator to the symbol if needed
-          const baseSymbol = ZODIAC_SYMBOLS[signIndex];
-          const symbol = isRetrograde ? `${baseSymbol}ᴿ` : baseSymbol;
-          
-          // Store planet data - make sure longitude is properly calculated
-          planets[planetKey] = {
-            name: sign,
-            symbol: symbol,
-            // This is the key longitude value that determines position on the wheel
-            longitude: absoluteDegree,
+          houses[`house${houseNumber}`] = {
+            cusp: absoluteDegree,
+            name: signName,
+            symbol: ZODIAC_SYMBOLS[signIndex],
             degree: degreeInSign
           };
           
-          console.log(`Parsed ${planetName} at ${absoluteDegree}° (${degreeInSign}° ${sign}), retrograde: ${isRetrograde}`);
+          console.log(`Parsed house ${houseNumber} cusp at ${absoluteDegree}° (${degreeInSign}° ${signName})`);
           
-          // If this is the Ascendant, store it separately
-          if (planetName === 'Ascendant') {
-            ascendant = planets[planetKey];
+          // If this is house 1, use it as the ascendant
+          if (houseNumber === 1) {
+            ascendant = {
+              name: signName,
+              symbol: ZODIAC_SYMBOLS[signIndex],
+              longitude: absoluteDegree,
+              degree: degreeInSign
+            };
           }
-        } else {
-          console.log(`Could not match pattern for ${planetName} in line: ${line}`);
         }
       }
-    }
-    
-    // Check for house cusps data in absolute degree format
-    // Example formats: 
-    // "house  1: 175.6389"
-    // Line might also contain "house1: 175.6389" or variations
-    const houseAbsoluteMatch = line.match(/house\s*(\d+):\s*(\d+\.\d+)/);
-    
-    // Alternative pattern for just house number and degree
-    const houseSimpleMatch = line.match(/house\s*(\d+)\s+(\d+\.\d+)/);
-    
-    // Example old format 1: "house  1: 15 Lib  5'"
-    // Example old format 2: "house  1: 15 Libra  5' 0.0""
-    const houseTraditionalMatch = line.match(/house\s+(\d+):\s+(\d+)\s+(\w+)\s+(\d+)'(\s+(\d+\.\d+)")?/);
-    
-    if (houseAbsoluteMatch || houseSimpleMatch) {
-      // Parse house with absolute degree
-      const match = houseAbsoluteMatch || houseSimpleMatch;
-      const houseNumber = parseInt(match![1]);
-      const absoluteDegree = parseFloat(match![2]);
-      
-      // Calculate which sign the degree falls in
-      const signIndex = Math.floor(absoluteDegree / 30) % 12;
-      const sign = ZODIAC_SIGNS[signIndex];
-      
-      // Calculate degree within that sign
-      const degreeInSign = absoluteDegree % 30;
-      
-      // Store house data - making sure cusp is the absolute degree
-      houses[`house${houseNumber}`] = {
-        cusp: absoluteDegree,
-        name: sign,
-        symbol: ZODIAC_SYMBOLS[signIndex],
-        degree: degreeInSign
-      };
-      
-      console.log(`Parsed house ${houseNumber} cusp at ${absoluteDegree}° (${degreeInSign}° ${sign})`);
-      
-      // If this is house 1, use it as the ascendant
-      if (houseNumber === 1) {
-        ascendant = {
-          name: sign,
-          symbol: ZODIAC_SYMBOLS[signIndex],
-          longitude: absoluteDegree,
-          degree: degreeInSign
-        };
-      }
-    } else if (houseTraditionalMatch) {
-      // Parse house with traditional format
-      const houseNumber = parseInt(houseTraditionalMatch[1]);
-      const degrees = parseInt(houseTraditionalMatch[2]);
-      
-      // Handle abbreviated sign names
-      let sign = houseTraditionalMatch[3];
-      if (sign.length <= 3) {
-        // Map abbreviations to full names
-        const abbrevMap: Record<string, string> = {
-          'Ari': 'Aries', 'Tau': 'Taurus', 'Gem': 'Gemini', 'Can': 'Cancer',
-          'Leo': 'Leo', 'Vir': 'Virgo', 'Lib': 'Libra', 'Sco': 'Scorpio',
-          'Sag': 'Sagittarius', 'Cap': 'Capricorn', 'Aqu': 'Aquarius', 'Pis': 'Pisces'
-        };
-        sign = abbrevMap[sign] || sign;
+    } else {
+      // Check if the line contains planet data with absolute degrees and motion (Swiss Ephemeris format)
+      // Format: "Sun              195.2253469   0.9869944   6.9210360"
+      for (const [planetName, planetKey] of Object.entries(planetMap)) {
+        if (line.startsWith(planetName)) {
+          // Extract the absolute degree and motion values
+          // Format: "Sun              195.2253469   0.9869944   6.9210360"
+          // We need to extract the first number (absolute degree) and second number (motion)
+          const pattern = new RegExp(`${planetName}\\s+(\\d+\\.\\d+)\\s+([\\-\\+]?\\d+\\.\\d+)`);
+          
+          // Alternative pattern if there are more spaces than expected
+          const alternativePattern = new RegExp(`${planetName}\\s+([\\d\\.]+)\\s+([\\-\\+]?[\\d\\.]+)`);
+          
+          let match = line.match(pattern);
+          if (!match) {
+            match = line.match(alternativePattern);
+          }
+          
+          if (match) {
+            console.log(`Found planet ${planetName} with data:`, match);
+            
+            // Parse the absolute degree (e.g., 195.2253469)
+            const absoluteDegree = parseFloat(match[1]);
+            
+            // Parse the motion value (positive = direct, negative = retrograde)
+            const motion = parseFloat(match[2]);
+            const isRetrograde = motion < 0;
+            
+            // Calculate which sign the degree falls in (each sign is 30 degrees)
+            const signIndex = Math.floor(absoluteDegree / 30) % 12;
+            const sign = ZODIAC_SIGNS[signIndex];
+            
+            // Calculate degree within that sign
+            const degreeInSign = absoluteDegree % 30;
+            
+            // Add retrograde indicator to the symbol if needed
+            const baseSymbol = ZODIAC_SYMBOLS[signIndex];
+            const symbol = isRetrograde ? `${baseSymbol}ᴿ` : baseSymbol;
+            
+            // Store planet data - make sure longitude is properly calculated
+            planets[planetKey] = {
+              name: sign,
+              symbol: symbol,
+              // This is the key longitude value that determines position on the wheel
+              longitude: absoluteDegree,
+              degree: degreeInSign
+            };
+            
+            console.log(`Parsed ${planetName} at ${absoluteDegree}° (${degreeInSign}° ${sign}), retrograde: ${isRetrograde}`);
+            
+            // If this is the Ascendant, store it separately
+            if (planetName === 'Ascendant') {
+              ascendant = planets[planetKey];
+            }
+          } else {
+            console.log(`Could not match pattern for ${planetName} in line: ${line}`);
+          }
+        }
       }
       
-      const minutes = parseInt(houseTraditionalMatch[4]);
-      // If seconds are available use them (captured in group 6), otherwise default to 0
-      const seconds = houseTraditionalMatch[6] ? parseFloat(houseTraditionalMatch[6]) : 0;
+      // Check for house cusps data in various formats
       
-      // Get the sign index
-      const signIndex = ZODIAC_SIGNS.indexOf(sign);
-      if (signIndex !== -1) {
-        // Calculate decimal degrees within the sign including seconds
-        const degreeInSign = degrees + (minutes / 60) + (seconds / 3600);
+      // Format: "house  1: 175.6389" or "house1: 175.6389"
+      const houseAbsoluteMatch = line.match(/house\s*(\d+):\s*(\d+\.\d+)/);
+      
+      // Alternative pattern for just house number and degree
+      const houseSimpleMatch = line.match(/house\s*(\d+)\s+(\d+\.\d+)/);
+      
+      // Traditional formats
+      // "house  1: 15 Lib  5'" or "house  1: 15 Libra  5' 0.0""
+      const houseTraditionalMatch = line.match(/house\s+(\d+):\s+(\d+)\s+(\w+)\s+(\d+)'(\s+(\d+\.\d+)")?/);
+      
+      if (houseAbsoluteMatch || houseSimpleMatch) {
+        // Parse house with absolute degree
+        const match = houseAbsoluteMatch || houseSimpleMatch;
+        const houseNumber = parseInt(match![1]);
+        const absoluteDegree = parseFloat(match![2]);
         
-        // Calculate total cusp
-        const cusp = signIndex * 30 + degreeInSign;
+        // Calculate which sign the degree falls in
+        const signIndex = Math.floor(absoluteDegree / 30) % 12;
+        const sign = ZODIAC_SIGNS[signIndex];
         
-        // Store house data
+        // Calculate degree within that sign
+        const degreeInSign = absoluteDegree % 30;
+        
+        // Store house data - making sure cusp is the absolute degree
         houses[`house${houseNumber}`] = {
+          cusp: absoluteDegree,
           name: sign,
           symbol: ZODIAC_SYMBOLS[signIndex],
-          cusp: cusp,
           degree: degreeInSign
         };
         
-        // If this is house 1, use it for the ascendant
+        console.log(`Parsed house ${houseNumber} cusp at ${absoluteDegree}° (${degreeInSign}° ${sign})`);
+        
+        // If this is house 1, use it as the ascendant
         if (houseNumber === 1) {
           ascendant = {
             name: sign,
             symbol: ZODIAC_SYMBOLS[signIndex],
-            longitude: cusp,
+            longitude: absoluteDegree,
             degree: degreeInSign
           };
+        }
+      } else if (houseTraditionalMatch) {
+        // Parse house with traditional format
+        const houseNumber = parseInt(houseTraditionalMatch[1]);
+        const degrees = parseInt(houseTraditionalMatch[2]);
+        
+        // Handle abbreviated sign names
+        let sign = houseTraditionalMatch[3];
+        if (sign.length <= 3) {
+          // Map abbreviations to full names
+          const abbrevMap: Record<string, string> = {
+            'Ari': 'Aries', 'Tau': 'Taurus', 'Gem': 'Gemini', 'Can': 'Cancer',
+            'Leo': 'Leo', 'Vir': 'Virgo', 'Lib': 'Libra', 'Sco': 'Scorpio',
+            'Sag': 'Sagittarius', 'Cap': 'Capricorn', 'Aqu': 'Aquarius', 'Pis': 'Pisces'
+          };
+          sign = abbrevMap[sign] || sign;
+        }
+        
+        const minutes = parseInt(houseTraditionalMatch[4]);
+        // If seconds are available use them (captured in group 6), otherwise default to 0
+        const seconds = houseTraditionalMatch[6] ? parseFloat(houseTraditionalMatch[6]) : 0;
+        
+        // Get the sign index
+        const signIndex = ZODIAC_SIGNS.indexOf(sign);
+        if (signIndex !== -1) {
+          // Calculate decimal degrees within the sign including seconds
+          const degreeInSign = degrees + (minutes / 60) + (seconds / 3600);
+          
+          // Calculate total cusp
+          const cusp = signIndex * 30 + degreeInSign;
+          
+          // Store house data
+          houses[`house${houseNumber}`] = {
+            name: sign,
+            symbol: ZODIAC_SYMBOLS[signIndex],
+            cusp: cusp,
+            degree: degreeInSign
+          };
+          
+          // If this is house 1, use it for the ascendant
+          if (houseNumber === 1) {
+            ascendant = {
+              name: sign,
+              symbol: ZODIAC_SYMBOLS[signIndex],
+              longitude: cusp,
+              degree: degreeInSign
+            };
+          }
         }
       }
     }

@@ -3,6 +3,7 @@
 ## Build Commands
 - `npm run dev` - Run development server (uses turbopack)
 - `npm run build` - Generate Prisma client and build Next.js app
+- `npm run postinstall` - Generate Prisma client
 - `npm run start` - Start production server
 - `npm run lint` - Run ESLint
 - `prisma generate` - Generate Prisma client after schema changes

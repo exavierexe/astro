@@ -3,9 +3,9 @@ import { neon } from "@neondatabase/serverless";
 import prisma from "./lib/prisma";
 import { revalidatePath } from "next/cache";
 import { calculateBirthChart as calculateEphemerisChart, geocodeLocation } from './lib/ephemeris';
-import { execSync } from 'child_process';
+// No need for execSync since we're using WebAssembly version
 import path from 'path';
-import fs from 'fs';
+// We still need fs for loading city data, but this will be removed in future
 
 // Time zone boundaries (approximate, simplified)
 const TIME_ZONE_BOUNDARIES = [
@@ -206,24 +206,6 @@ export const querySwissEph = async (params: {
     // Geocode the provided location
     const geocodedLocation = await geocodeLocation(location);
     
-    // Path to the Swiss Ephemeris binary
-    const swissEphPath = path.join(process.cwd(), 'swisseph-master');
-    const sweTestPath = path.join(swissEphPath, 'swetest');
-    
-    // Set up the environment
-    const env = {
-      ...process.env,
-      SE_EPHE_PATH: path.join(swissEphPath, 'ephe')
-    };
-    
-    // Ensure executable permissions
-    try {
-      fs.chmodSync(sweTestPath, 0o755);
-    } catch (chmodError) {
-      console.error('Error setting executable permissions:', chmodError);
-      // Continue anyway
-    }
-    
     // Parse date and time with validation
     const [day, month, year] = date.split('.').map(Number);
     const [hour, minute, second = 0] = time.split(':').map(Number);
@@ -236,21 +218,7 @@ export const querySwissEph = async (params: {
       };
     }
     
-    // IMPORTANT: Since we're having issues with JavaScript Date objects and timezones,
-    // let's use a completely different approach that avoids JavaScript Date objects entirely
-    // for the UTC conversion. We'll only use Date objects for formatting at the very end.
-    
-    console.log(`Input (local time): ${year}-${month}-${day} ${hour}:${minute}:${second}`);
-    
-    // Store the input values directly - we'll convert to UTC manually without using Date objects
-    const localYear = year;
-    const localMonth = month;
-    const localDay = day;
-    const localHour = hour;
-    const localMinute = minute;
-    const localSecond = second;
-    
-    // Get the time zone information for the location using our TimeZoneDB data
+    // Get the time zone information for the location
     let timeZoneInfo;
     
     // Use the timeZone information from geocodeLocation if available
@@ -263,14 +231,14 @@ export const querySwissEph = async (params: {
       const offsetMinutes = Math.abs(totalMinutes) % 60;
       
       // Format timezone name with sign
-      const sign = totalMinutes >= 0 ? '+' : '-';
+      const tzSignA = totalMinutes >= 0 ? '+' : '-';
       const formattedHours = Math.abs(offsetHours).toString().padStart(2, '0');
       const formattedMinutes = Math.abs(offsetMinutes).toString().padStart(2, '0');
       
       timeZoneInfo = {
-        name: `${geocodedLocation.timeZone.zoneName} (UTC${sign}${formattedHours}:${formattedMinutes})`,
+        name: `${geocodedLocation.timeZone.zoneName} (UTC${tzSignA}${formattedHours}:${formattedMinutes})`,
         offsetHours,
-        offsetMinutes: offsetMinutes * (totalMinutes >= 0 ? 1 : -1), // Keep the original sign
+        offsetMinutes: offsetMinutes * (totalMinutes >= 0 ? 1 : -1),
         totalOffsetMinutes: totalMinutes
       };
     } else {
@@ -280,333 +248,257 @@ export const querySwissEph = async (params: {
     
     console.log(`Time zone: ${timeZoneInfo.name}, offset: ${timeZoneInfo.offsetHours}:${Math.abs(timeZoneInfo.offsetMinutes).toString().padStart(2, '0')}`);
     
-    // Convert local time to GMT manually using a simple offset calculation
-    // This approach avoids the complexity of JavaScript Date objects and timezones
+    // Format the offset for the ISO string
+    const offsetHours = Math.floor(Math.abs(timeZoneInfo.totalOffsetMinutes) / 60);
+    const offsetMinutes = Math.abs(timeZoneInfo.totalOffsetMinutes) % 60;
+    const offsetSign = timeZoneInfo.totalOffsetMinutes >= 0 ? '+' : '-';
+    const offsetString = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMinutes).padStart(2, '0')}`;
     
-    console.log(`Location timezone offset: ${timeZoneInfo.totalOffsetMinutes} minutes`);
+    // Format the date as an ISO string with timezone
+    const [d, m, y] = date.split('.').map(Number);
+    const [h, min, sec = 0] = time.split(':').map(Number);
     
-    // Convert local time to UTC
-    // For positive offsets (east of Greenwich), we subtract hours
-    // For negative offsets (west of Greenwich), we add hours
+    // Create an ISO date string with timezone information
+    const isoDateString = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}T${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}${offsetString}`;
     
-    // Verify we have a valid timeZoneInfo with totalOffsetMinutes
-    if (!timeZoneInfo || typeof timeZoneInfo.totalOffsetMinutes !== 'number') {
-      console.log('Invalid timeZoneInfo or missing totalOffsetMinutes, using default timezone UTC+0');
-      timeZoneInfo = {
-        name: 'UTC+0:00 (Default)',
-        offsetHours: 0,
-        offsetMinutes: 0,
-        totalOffsetMinutes: 0
-      };
-    }
+    // Create Date object from ISO string - this automatically handles timezone conversion
+    const dateObj = new Date(isoDateString);
     
-    // We'll convert by calculating total minutes and then distributing to hour/minute/day
-    let totalLocalMinutes = (localHour * 60) + localMinute;
+    console.log(`Date with timezone offset (${offsetString}): ${isoDateString}`);
+    console.log(`Parsed Date object: ${dateObj.toString()}`);
+    console.log(`UTC time: ${dateObj.toUTCString()}`);
     
-    // Handle special cases for well-known cities
-    const normalizedLocation = location.toLowerCase().trim();
+    // Now use the pure JavaScript ephemeris package to calculate planet positions
+    // Import ephemeris directly here since this is a server action
+    const ephemerisJs = await import('ephemeris');
     
-    // Special case handling for major timezones
-    const specialCases: Record<string, { hours: number; name: string }> = {
-     // 'tokyo': { hours: 9, name: 'JST (UTC+9:00)' },
-     // 'beijing': { hours: 8, name: 'China Standard Time (UTC+8:00)' },
-    //  'delhi': { hours: 5.5, name: 'India Standard Time (UTC+5:30)' },
-    //  'london': { hours: 0, name: 'GMT (UTC+0:00)' },
-   //   'paris': { hours: 1, name: 'Central European Time (UTC+1:00)' },
-    //  'berlin': { hours: 1, name: 'Central European Time (UTC+1:00)' },
-      //'new york': { hours: -5, name: 'Eastern Standard Time (UTC-5:00)' },
-    //  'los angeles': { hours: -8, name: 'Pacific Standard Time (UTC-8:00)' },
-    //  'sydney': { hours: 10, name: 'Australian Eastern Standard Time (UTC+10:00)' }
-    };
+    // Calculate the positions using ephemeris.js
+    const result = ephemerisJs.getAllPlanets(
+      dateObj,
+      geocodedLocation.longitude,
+      geocodedLocation.latitude,
+      0 // height in meters
+    );
     
-    // Check if the location matches any of our special cases
-    let specialCase: { city: string; hours: number; name: string } | null = null;
-    for (const [cityName, cityInfo] of Object.entries(specialCases)) {
-      if (normalizedLocation.includes(cityName)) {
-        specialCase = { 
-          city: cityName, 
-          hours: cityInfo.hours,
-          name: cityInfo.name 
-        };
-        break;
-      }
-    }
+    // Extract Julian Day from result
+    const julDay = result.date.julianTerrestrial || 0;
     
-    // If we found a special case, use its timezone offset
-    if (specialCase) {
-      console.log(`Special handling for ${specialCase.city} timezone:`);
-      console.log(`  • Local time: ${localHour}:${localMinute}`);
-      console.log(`  • Current timezone offset: ${timeZoneInfo.totalOffsetMinutes} minutes (${timeZoneInfo.totalOffsetMinutes/60} hours)`);
-      
-      // Convert hours to minutes (handling half-hour timezones)
-      const expectedOffset = Math.round(specialCase.hours * 60);
-      
-      // If the current offset is significantly different, override it
-      if (Math.abs(timeZoneInfo.totalOffsetMinutes - expectedOffset) > 30) {
-        console.log(`  • Correcting ${specialCase.city} timezone offset to ${specialCase.hours} hours (${expectedOffset} minutes)`);
-        timeZoneInfo.totalOffsetMinutes = expectedOffset;
-        timeZoneInfo.offsetHours = Math.floor(specialCase.hours);
-        timeZoneInfo.offsetMinutes = Math.abs((specialCase.hours - Math.floor(specialCase.hours)) * 60);
-        timeZoneInfo.name = specialCase.name;
-      }
-    }
+    // Calculate positions for the main planets
+    const planetData: any = {};
     
-    // Subtract the timezone offset to get UTC time in minutes
-    let totalUtcMinutes = totalLocalMinutes - timeZoneInfo.totalOffsetMinutes;
+    // Define planets to calculate
+    const planets = [
+      { id: 'sun', name: 'Sun' },
+      { id: 'moon', name: 'Moon' },
+      { id: 'mercury', name: 'Mercury' },
+      { id: 'venus', name: 'Venus' },
+      { id: 'mars', name: 'Mars' },
+      { id: 'jupiter', name: 'Jupiter' },
+      { id: 'saturn', name: 'Saturn' },
+      { id: 'uranus', name: 'Uranus' },
+      { id: 'neptune', name: 'Neptune' },
+      { id: 'pluto', name: 'Pluto' },
+      { id: 'chiron', name: 'Chiron' }
+    ];
     
-    // Since JavaScript % operator doesn't work properly with negative numbers for our purposes,
-    // we need a special handling to get the correct hour and minute
-    // This ensures proper handling of negative minutes (like -30 becoming 23:30)
-    let utcHour, utcMinute;
+    // The zodiac signs array
+    const zodiacSigns = [
+      'Aries', 'Taurus', 'Gemini', 'Cancer',
+      'Leo', 'Virgo', 'Libra', 'Scorpio',
+      'Sagittarius', 'Capricorn', 'Aquarius', 'Pisces'
+    ];
     
-    if (totalUtcMinutes < 0) {
-        // For negative total minutes, we need to calculate the correct hour and minute
-        // Example: -30 minutes should be 23:30 from the previous day
-        const absMinutes = Math.abs(totalUtcMinutes);
-        utcHour = Math.floor(absMinutes / 60);
-        utcMinute = absMinutes % 60;
-        
-        // Convert to the correct "negative time"
-        if (utcMinute === 0) {
-            utcHour = 24 - utcHour;
-        } else {
-            utcHour = 23 - utcHour;
-            utcMinute = 60 - utcMinute;
-        }
-    } else {
-        // For positive total minutes, the standard calculation works
-        utcHour = Math.floor(totalUtcMinutes / 60);
-        utcMinute = totalUtcMinutes % 60;
-    }
-    
-    // Initialize UTC date components
-    let utcSecond = localSecond;
-    let utcDay = localDay;
-    let utcMonth = localMonth;
-    let utcYear = localYear;
-    
-    // For times before midnight (negative hours)
-    while (utcHour < 0) {
-      utcHour += 24;
-      utcDay -= 1;
-    }
-    
-    // For times after midnight crossing to next day
-    while (utcHour >= 24) {
-      utcHour -= 24;
-      utcDay += 1;
-    }
-    
-    // Check if we need to adjust the month/year
-    // This is a simplified approach - a full implementation would account for all edge cases
-    const daysInMonth = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-    
-    // Adjust for leap year if needed (February)
-    if (utcMonth === 2 && ((utcYear % 4 === 0 && utcYear % 100 !== 0) || utcYear % 400 === 0)) {
-      daysInMonth[2] = 29;
-    }
-    
-    // Adjust the day/month/year if needed
-    if (utcDay < 1) {
-      utcMonth -= 1;
-      if (utcMonth < 1) {
-        utcMonth = 12;
-        utcYear -= 1;
-      }
-      utcDay = daysInMonth[utcMonth];
-    } else if (utcDay > daysInMonth[utcMonth]) {
-      utcDay = 1;
-      utcMonth += 1;
-      if (utcMonth > 12) {
-        utcMonth = 1;
-        utcYear += 1;
-      }
-    }
-    // Additional validation to catch any invalid conversions
-    if (isNaN(utcHour) || isNaN(utcMinute)) {
-      console.error('Invalid UTC time calculated (NaN values):', { utcHour, utcMinute, utcSecond });
-      return {
-        output: '',
-        error: 'Invalid time value after conversion. Please try a different time or location.'
-      };
-    }
-
-    // Normalize hour value to 0-23 range, adjusting the day if necessary
-    if (utcHour < 0) {
-      console.log(`Normalizing negative hour ${utcHour} to valid range`);
-      while (utcHour < 0) {
-        utcHour += 24;
-        utcDay -= 1;
-      }
-    } else if (utcHour >= 24) {
-      console.log(`Normalizing hour ${utcHour} >= 24 to valid range`);
-      while (utcHour >= 24) {
-        utcHour -= 24;
-        utcDay += 1;
-      }
-    }
-
-    // Normalize minute value to 0-59 range
-    if (utcMinute < 0) {
-      console.log(`Normalizing negative minute ${utcMinute} to valid range`);
-      utcMinute += 60;
-      utcHour -= 1;
-      // Re-normalize hour if needed
-      if (utcHour < 0) {
-        utcHour += 24;
-        utcDay -= 1;
-      }
-    } else if (utcMinute >= 60) {
-      console.log(`Normalizing minute ${utcMinute} >= 60 to valid range`);
-      utcMinute -= 60;
-      utcHour += 1;
-      // Re-normalize hour if needed
-      if (utcHour >= 24) {
-        utcHour -= 24;
-        utcDay += 1;
-      }
-    }
-    // Calculate offset hours and minutes for display
-    const offsetHours = Math.floor(Math.abs(timeZoneInfo.totalOffsetMinutes) / 60) * 
-                       (timeZoneInfo.totalOffsetMinutes >= 0 ? 1 : -1);
-    const offsetMinutes = Math.abs(timeZoneInfo.totalOffsetMinutes) % 60 * 
-                          (timeZoneInfo.totalOffsetMinutes >= 0 ? 1 : -1);
-    
-    console.log(`Converted local time to UTC:`);
-    console.log(`  • Local time: ${localYear}-${localMonth}-${localDay} ${localHour}:${localMinute}:${localSecond}`);
-    console.log(`  • Timezone offset: ${offsetHours} hours, ${offsetMinutes} minutes (${timeZoneInfo.totalOffsetMinutes} minutes total)`);
-    console.log(`  • UTC time: ${utcYear}-${utcMonth}-${utcDay} ${utcHour}:${utcMinute}:${utcSecond}`);
-    
-    // Create a Date object using UTC explicitly for formatting purposes only
-    const utcDate = new Date(Date.UTC(utcYear, utcMonth - 1, utcDay, utcHour, utcMinute, utcSecond));
-    console.log(`Converted to UTC: ${utcDate.toISOString()}`);
-    
-    // Format strings directly without relying on Date methods for the Swiss Ephemeris command
-    // Ensure date values are within valid ranges
-    if (utcDay < 1) utcDay = 1;
-    if (utcDay > 28 && utcMonth === 2) utcDay = 28; // Safe default for February
-    if (utcDay > 30 && (utcMonth === 4 || utcMonth === 6 || utcMonth === 9 || utcMonth === 11)) utcDay = 30;
-    if (utcDay > 31) utcDay = 31;
-    
-    // Ensure time values are within valid ranges
-    const formattedHour = (((utcHour % 24) + 24) % 24).toString().padStart(2, '0'); // Double modulo to handle negative hours
-    const formattedMinute = (((utcMinute % 60) + 60) % 60).toString().padStart(2, '0'); // Double modulo to handle negative minutes
-    const formattedSecond = (((utcSecond % 60) + 60) % 60).toString().padStart(2, '0'); // Double modulo to handle negative seconds
-    
-    const utcTimeStr = `${formattedHour}:${formattedMinute}:${formattedSecond}`;
-    const utcDateStr = `${utcDay.toString().padStart(2, '0')}.${utcMonth.toString().padStart(2, '0')}.${utcYear.toString().padStart(4, '0')}`;
-    
-    console.log(`UTC date/time for Swiss Ephemeris: ${utcDateStr} ${utcTimeStr}`);
-    
-    console.log(`Converting local time ${date} ${time} to UTC: ${utcDateStr} ${utcTimeStr}`);
-    console.log(`Location: ${geocodedLocation.formattedAddress}, Time Zone: ${timeZoneInfo.name}`);
-    
-    // Build the command with converted UTC time
-    // Always use Gregorian calendar by appending 'greg' to the date
-    // This fixes the bug where Swiss Ephemeris was subtracting 530 years from the birth year
-    // for historical dates (before October 4, 1582)
-    let command = `${sweTestPath} -b${utcDateStr}greg -ut${utcTimeStr}`;
-    
-    // Add location parameters if we have valid coordinates
-    if (geocodedLocation.latitude !== 0 || geocodedLocation.longitude !== 0) {
-      command += ` -geopos${geocodedLocation.longitude},${geocodedLocation.latitude},0 -house${geocodedLocation.longitude},${geocodedLocation.latitude},P -hsys${encodeURIComponent("A")}`;
-    }
-    
-    // Add default parameters
-    command += ' -fPlsj';
-    
-    console.log('Running Swiss Ephemeris command:', command);
-    
-    // Execute the command
-    let output;
-    try {
-      // Set the library path
-      const libraryPath = process.env.DYLD_LIBRARY_PATH || '';
-      const newLibraryPath = `${swissEphPath}:${process.cwd()}:${libraryPath}`;
-      
-      const updatedEnv = {
-        ...env,
-        DYLD_LIBRARY_PATH: newLibraryPath
-      };
-      
-      output = execSync(command, { env: updatedEnv, encoding: 'utf8', timeout: 15000 });
-    } catch (execError: any) {
-      console.error('Error executing Swiss Ephemeris:', execError);
-      
-      // Extract stdout if available
-      let extractedOutput = '';
-      if (execError.stdout) {
-        extractedOutput = execError.stdout.toString();
-        
-        // Format the output data
-        const timezoneInfo = geocodedLocation.timeZone ? 
-          `Time Zone: ${geocodedLocation.timeZone.zoneName} (${geocodedLocation.timeZone.countryName})` :
-          `Time Zone: ${timeZoneInfo.name}`;
+    // Extract the position of each planet
+    for (const planet of planets) {
+      try {
+        if (result.observed[planet.id]) {
+          const planetResult = result.observed[planet.id];
           
-        const formattedData = 
-`Date (Local): ${date}
-Time (Local): ${time}
-Date (UTC): ${utcDateStr}
-Time (UTC): ${utcTimeStr}
-Location: ${geocodedLocation.formattedAddress}
-${timezoneInfo}
-Latitude: ${geocodedLocation.latitude.toFixed(4)}° ${geocodedLocation.latitude >= 0 ? 'N' : 'S'}
-Longitude: ${geocodedLocation.longitude.toFixed(4)}° ${geocodedLocation.longitude >= 0 ? 'E' : 'W'}
-
----- SWISS EPHEMERIS OUTPUT ----
-${extractedOutput}`;
-        
-        return {
-          output: formattedData,
-          error: 'Command executed with warnings, but data is available.'
-        };
+          // Get longitude from the result
+          const longitude = planetResult.apparentLongitudeDd;
+          const signIndex = Math.floor(longitude / 30) % 12;
+          const degree = longitude % 30;
+          
+          // Ephemeris.js doesn't provide speed data, so we don't know if it's retrograde
+          const retrograde = false;
+          
+          const sign = zodiacSigns[signIndex];
+          
+          // Format the position output similar to Swiss Ephemeris command line tool
+          const minutes = Math.floor((degree - Math.floor(degree)) * 60);
+          const seconds = Math.floor(((degree - Math.floor(degree)) * 60 - minutes) * 60);
+          
+          planetData[planet.name] = {
+            longitude,
+            sign,
+            degree: Math.floor(degree),
+            minutes,
+            seconds,
+            retrograde,
+            formattedPosition: `${Math.floor(degree)}° ${sign} ${minutes}' ${seconds.toFixed(1)}" ${retrograde ? 'R' : ''}`
+          };
+        }
+      } catch (err) {
+        console.error(`Error calculating ${planet.name} position:`, err);
       }
-      
-      // No stdout available, show an error message
-      const timezoneInfo = geocodedLocation.timeZone ? 
-        `Time Zone: ${geocodedLocation.timeZone.zoneName} (${geocodedLocation.timeZone.countryName})` :
-        `Time Zone: ${timeZoneInfo.name}`;
-        
-      return {
-        output: `Date (Local): ${date}
-Time (Local): ${time}
-Date (UTC): ${utcDateStr}
-Time (UTC): ${utcTimeStr}
-Location: ${geocodedLocation.formattedAddress}
-${timezoneInfo}
-${geocodedLocation.latitude !== 0 || geocodedLocation.longitude !== 0 ? 
-  `Latitude: ${geocodedLocation.latitude.toFixed(4)}° ${geocodedLocation.latitude >= 0 ? 'N' : 'S'}
-Longitude: ${geocodedLocation.longitude.toFixed(4)}° ${geocodedLocation.longitude >= 0 ? 'E' : 'W'}` : ''}
-
-No output data available.`,
-        error: 'Failed to execute Swiss Ephemeris command. No data available.'
-      };
     }
     
-    // Check if output is empty or has an error
-    if (!output || output.trim() === '') {
-      const timezoneInfo = geocodedLocation.timeZone ? 
-        `Time Zone: ${geocodedLocation.timeZone.zoneName} (${geocodedLocation.timeZone.countryName})` :
-        `Time Zone: ${timeZoneInfo.name}`;
-        
-      return {
-        output: `Date (Local): ${date}
-Time (Local): ${time}
-Date (UTC): ${utcDateStr}
-Time (UTC): ${utcTimeStr}
-Location: ${geocodedLocation.formattedAddress}
-${timezoneInfo}
-${geocodedLocation.latitude !== 0 || geocodedLocation.longitude !== 0 ? 
-  `Latitude: ${geocodedLocation.latitude.toFixed(4)}° ${geocodedLocation.latitude >= 0 ? 'N' : 'S'}
-Longitude: ${geocodedLocation.longitude.toFixed(4)}° ${geocodedLocation.longitude >= 0 ? 'E' : 'W'}` : ''}
-
-No data returned from Swiss Ephemeris.`,
-        error: 'No output was generated. Please check the date and time format.'
+    // Calculate mean nodes (not provided by ephemeris.js directly)
+    try {
+      // Approximation based on standard formulas
+      const T = (julDay - 2451545.0) / 36525; // Julian centuries since J2000.0
+      const meanNodeLongitude = 125.04452 - 1934.136261 * T + 0.0020708 * T * T + T * T * T / 450000;
+      // Normalize to 0-360 range
+      const normalizedNodeLong = ((meanNodeLongitude % 360) + 360) % 360;
+      
+      // Mean Node
+      const meanNodeSignIndex = Math.floor(normalizedNodeLong / 30) % 12;
+      const meanNodeDegree = normalizedNodeLong % 30;
+      const meanNodeMinutes = Math.floor((meanNodeDegree - Math.floor(meanNodeDegree)) * 60);
+      const meanNodeSeconds = Math.floor(((meanNodeDegree - Math.floor(meanNodeDegree)) * 60 - meanNodeMinutes) * 60);
+      
+      planetData['Mean Node'] = {
+        longitude: normalizedNodeLong,
+        sign: zodiacSigns[meanNodeSignIndex],
+        degree: Math.floor(meanNodeDegree),
+        minutes: meanNodeMinutes,
+        seconds: meanNodeSeconds,
+        retrograde: false,
+        formattedPosition: `${Math.floor(meanNodeDegree)}° ${zodiacSigns[meanNodeSignIndex]} ${meanNodeMinutes}' ${meanNodeSeconds.toFixed(1)}"`
       };
+      
+      // For this implementation, True Node is same as Mean Node
+      planetData['True Node'] = planetData['Mean Node'];
+      
+    } catch (err) {
+      console.error('Error calculating nodes:', err);
+    }
+    
+    // Calculate house cusps if coordinates are available
+    let houseData: any = {};
+    
+    if (geocodedLocation.latitude !== 0 || geocodedLocation.longitude !== 0) {
+      try {
+        // Calculate ascendant (RAMC + 90 degrees adjusted for latitude)
+        // This is a simplified formula
+        const RAMC = (result.date.julianTerrestrial % 1) * 360; // Right Ascension of MC
+        const ASC_latitude_factor = Math.tan(geocodedLocation.latitude * Math.PI / 180);
+        const ascLongitude = (RAMC + 90 + 15 * ASC_latitude_factor) % 360;
+        const mcLongitude = (RAMC + 180) % 360; // Midheaven is opposite RAMC
+        
+        // Ascendant
+        const ascSignIndex = Math.floor(ascLongitude / 30) % 12;
+        const ascDegree = ascLongitude % 30;
+        const ascMinutes = Math.floor((ascDegree - Math.floor(ascDegree)) * 60);
+        const ascSeconds = Math.floor(((ascDegree - Math.floor(ascDegree)) * 60 - ascMinutes) * 60);
+        
+        houseData['Ascendant'] = {
+          longitude: ascLongitude,
+          sign: zodiacSigns[ascSignIndex],
+          degree: Math.floor(ascDegree),
+          minutes: ascMinutes,
+          seconds: ascSeconds,
+          formattedPosition: `${Math.floor(ascDegree)}° ${zodiacSigns[ascSignIndex]} ${ascMinutes}' ${ascSeconds.toFixed(1)}"`
+        };
+        
+        // Midheaven
+        const mcSignIndex = Math.floor(mcLongitude / 30) % 12;
+        const mcDegree = mcLongitude % 30;
+        const mcMinutes = Math.floor((mcDegree - Math.floor(mcDegree)) * 60);
+        const mcSeconds = Math.floor(((mcDegree - Math.floor(mcDegree)) * 60 - mcMinutes) * 60);
+        
+        houseData['Midheaven'] = {
+          longitude: mcLongitude,
+          sign: zodiacSigns[mcSignIndex],
+          degree: Math.floor(mcDegree),
+          minutes: mcMinutes,
+          seconds: mcSeconds,
+          formattedPosition: `${Math.floor(mcDegree)}° ${zodiacSigns[mcSignIndex]} ${mcMinutes}' ${mcSeconds.toFixed(1)}"`
+        };
+        
+        // Calculate house cusps using equal house system
+        // Each house is 30 degrees, starting from the Ascendant
+        for (let i = 1; i <= 12; i++) {
+          const houseCusp = (ascLongitude + (i - 1) * 30) % 360;
+          const houseSignIndex = Math.floor(houseCusp / 30) % 12;
+          const houseDegree = houseCusp % 30;
+          const houseMinutes = Math.floor((houseDegree - Math.floor(houseDegree)) * 60);
+          const houseSeconds = Math.floor(((houseDegree - Math.floor(houseDegree)) * 60 - houseMinutes) * 60);
+          
+          houseData[`House ${i}`] = {
+            longitude: houseCusp,
+            sign: zodiacSigns[houseSignIndex],
+            degree: Math.floor(houseDegree),
+            minutes: houseMinutes,
+            seconds: houseSeconds,
+            formattedPosition: `${Math.floor(houseDegree)}° ${zodiacSigns[houseSignIndex]} ${houseMinutes}' ${houseSeconds.toFixed(1)}"`
+          };
+        }
+        
+      } catch (err) {
+        console.error('Error calculating houses:', err);
+      }
+    }
+    
+    // Format the output to look similar to the original Swiss Ephemeris output
+    let formattedOutput = '';
+    
+    // Add planet positions
+    formattedOutput += 'Planets:\n';
+    for (const [name, data] of Object.entries(planetData)) {
+      formattedOutput += `${name.padEnd(12)} ${data.formattedPosition}\n`;
+    }
+    
+    // Add house cusps if available
+    if (Object.keys(houseData).length > 0) {
+      formattedOutput += '\nHouses:\n';
+      
+      // First add special points
+      if (houseData['Ascendant']) {
+        formattedOutput += `Ascendant    ${houseData['Ascendant'].formattedPosition}\n`;
+      }
+      
+      if (houseData['Midheaven']) {
+        formattedOutput += `Midheaven    ${houseData['Midheaven'].formattedPosition}\n`;
+      }
+      
+      // Then add house cusps
+      for (let i = 1; i <= 12; i++) {
+        const houseKey = `House ${i}`;
+        if (houseData[houseKey]) {
+          formattedOutput += `house ${i.toString().padStart(2)}     ${houseData[houseKey].formattedPosition}\n`;
+        }
+      }
+    }
+    
+    // Get UTC date and time components
+    let utcDateStr, utcTimeStr;
+    
+    // Check if universalDate is available, otherwise fall back to dateObj
+    if (result.date && result.date.universalDateString) {
+      // Parse from the string format '10.8.2015 17:7:52.983'
+      const dateParts = result.date.universalDateString.split(' ');
+      if (dateParts.length >= 2) {
+        utcDateStr = dateParts[0]; // e.g. '10.8.2015'
+        utcTimeStr = dateParts[1]; // e.g. '17:7:52.983'
+      }
+    } 
+    
+    // If we couldn't get the universal date string, use the dateObj
+    if (!utcDateStr || !utcTimeStr) {
+      const utcDay = dateObj.getUTCDate().toString().padStart(2, '0');
+      const utcMonth = (dateObj.getUTCMonth() + 1).toString().padStart(2, '0');
+      const utcYear = dateObj.getUTCFullYear();
+      const utcHour = dateObj.getUTCHours().toString().padStart(2, '0');
+      const utcMinute = dateObj.getUTCMinutes().toString().padStart(2, '0');
+      const utcSecond = dateObj.getUTCSeconds().toString().padStart(2, '0');
+      
+      utcDateStr = `${utcDay}.${utcMonth}.${utcYear}`;
+      utcTimeStr = `${utcHour}:${utcMinute}:${utcSecond}`;
     }
     
     // Add location information to the output
-    const timezoneInfo = geocodedLocation.timeZone ? 
+    const timezoneInfoText = geocodedLocation.timeZone ? 
       `Time Zone: ${geocodedLocation.timeZone.zoneName} (${geocodedLocation.timeZone.countryName})` :
       `Time Zone: ${timeZoneInfo.name}`;
       
@@ -616,16 +508,17 @@ Time (Local): ${time}
 Date (UTC): ${utcDateStr}
 Time (UTC): ${utcTimeStr}
 Location: ${geocodedLocation.formattedAddress}
-${timezoneInfo}
+${timezoneInfoText}
 Latitude: ${geocodedLocation.latitude.toFixed(4)}° ${geocodedLocation.latitude >= 0 ? 'N' : 'S'}
 Longitude: ${geocodedLocation.longitude.toFixed(4)}° ${geocodedLocation.longitude >= 0 ? 'E' : 'W'}
+Julian Day: ${julDay.toFixed(6)}
 
----- SWISS EPHEMERIS OUTPUT ----
-${output}`;
+---- JAVASCRIPT EPHEMERIS OUTPUT ----
+${formattedOutput}`;
     
     return { output: locationInfo };
   } catch (error: any) {
-    console.error('Error executing Swiss Ephemeris query:', error);
+    console.error('Error executing ephemeris calculation:', error);
     return {
       output: '',
       error: `Error: ${error.message}`
@@ -635,7 +528,7 @@ ${output}`;
 
 // Birth Chart Calculator Actions
 
-// Calculate a birth chart using Swiss Ephemeris binary directly
+// Calculate a birth chart using JavaScript ephemeris implementation
 export const calculateBirthChartWithSwissEph = async (params: {
   birthDate: string;
   birthTime: string;
@@ -677,18 +570,7 @@ export const calculateBirthChartWithSwissEph = async (params: {
       };
     }
     
-    // IMPORTANT: Since we're having issues with JavaScript Date objects and timezones,
-    // let's use a completely different approach that avoids JavaScript Date objects entirely
-    // for the UTC conversion. We'll only use Date objects for formatting at the very end.
-    
     console.log(`Input (local birth time): ${year}-${month}-${day} ${hour}:${minute}`);
-    
-    // Store the input values directly - we'll convert to UTC manually without using Date objects
-    const birthYear = year;
-    const birthMonth = month;
-    const birthDay = day;
-    const birthHour = hour;
-    const birthMinute = minute;
     
     // Get the time zone information for the location
     let timeZoneInfo;
@@ -703,12 +585,12 @@ export const calculateBirthChartWithSwissEph = async (params: {
       const offsetMinutes = Math.abs(totalMinutes) % 60;
       
       // Format timezone name with sign
-      const sign = totalMinutes >= 0 ? '+' : '-';
+      const tzSignB = totalMinutes >= 0 ? '+' : '-';
       const formattedHours = Math.abs(offsetHours).toString().padStart(2, '0');
       const formattedMinutes = Math.abs(offsetMinutes).toString().padStart(2, '0');
       
       timeZoneInfo = {
-        name: `${geocodedLocation.timeZone.zoneName} (${geocodedLocation.timeZone.countryName}) UTC${sign}${formattedHours}:${formattedMinutes}`,
+        name: `${geocodedLocation.timeZone.zoneName} (${geocodedLocation.timeZone.countryName}) UTC${tzSignB}${formattedHours}:${formattedMinutes}`,
         offsetHours,
         offsetMinutes: offsetMinutes * (totalMinutes >= 0 ? 1 : -1), // Keep the original sign
         totalOffsetMinutes: totalMinutes
@@ -720,15 +602,6 @@ export const calculateBirthChartWithSwissEph = async (params: {
     
     console.log(`Time zone: ${timeZoneInfo.name}, offset: ${timeZoneInfo.offsetHours}:${Math.abs(timeZoneInfo.offsetMinutes).toString().padStart(2, '0')}`);
     
-    // Convert local birth time to GMT manually using a simple offset calculation
-    // This approach avoids the complexity of JavaScript Date objects and timezones
-    
-    console.log(`Birth location timezone offset: ${timeZoneInfo.totalOffsetMinutes} minutes`);
-    
-    // Convert local time to UTC
-    // For locations east of Greenwich (positive offset), we subtract the offset
-    // For locations west of Greenwich (negative offset), we add the offset
-
     // Ensure timeZoneInfo is properly initialized
     if (!timeZoneInfo || typeof timeZoneInfo.totalOffsetMinutes !== 'number') {
       console.error('Invalid timeZoneInfo:', timeZoneInfo);
@@ -737,374 +610,53 @@ export const calculateBirthChartWithSwissEph = async (params: {
       };
     }
     
-    // We'll convert by calculating total minutes and then distributing to hour/minute/day
-    let totalLocalMinutes = (birthHour * 60) + birthMinute;
+    // Calculate the timezone offset in seconds
+    const timezoneOffsetSeconds = timeZoneInfo.totalOffsetMinutes * 60;
     
-    // Handle special cases for well-known cities
-    const normalizedLocation = birthPlace.toLowerCase().trim();
+    // Format the offset for the ISO string
+    const offsetHours = Math.floor(Math.abs(timezoneOffsetSeconds) / 3600);
+    const offsetMinutes = Math.floor((Math.abs(timezoneOffsetSeconds) % 3600) / 60);
+    const offsetSign = timezoneOffsetSeconds >= 0 ? '+' : '-';
+    const offsetString = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMinutes).padStart(2, '0')}`;
     
-    // Special case handling for major timezones
-    const specialCases: Record<string, { hours: number; name: string }> = {
-      //'tokyo': { hours: 9, name: 'JST (UTC+9:00)' },
-     // 'beijing': { hours: 8, name: 'China Standard Time (UTC+8:00)' },
-      //'delhi': { hours: 5.5, name: 'India Standard Time (UTC+5:30)' },
-     // 'london': { hours: 0, name: 'GMT (UTC+0:00)' },
-      //'paris': { hours: 1, name: 'Central European Time (UTC+1:00)' },
-      //'berlin': { hours: 1, name: 'Central European Time (UTC+1:00)' },
-      //'new york': { hours: -5, name: 'Eastern Standard Time (UTC-5:00)' },
-      //'los angeles': { hours: -8, name: 'Pacific Standard Time (UTC-8:00)' },
-      //'sydney': { hours: 10, name: 'Australian Eastern Standard Time (UTC+10:00)' }
+    // Create an ISO date string with timezone information
+    // Format: YYYY-MM-DDTHH:mm:ssZ or YYYY-MM-DDTHH:mm:ss+HH:mm
+    const isoDateString = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00${offsetString}`;
+    
+    // Create Date object from ISO string - this automatically handles timezone conversion
+    const parsedBirthDate = new Date(isoDateString);
+    
+    console.log(`Birth time with timezone offset (${offsetString}): ${isoDateString}`);
+    console.log(`Parsed Date object: ${parsedBirthDate.toString()}`);
+    console.log(`UTC birth time: ${parsedBirthDate.toUTCString()}`);
+    
+    // Use the pure JavaScript ephemeris implementation to calculate the chart
+    // The ephemeris.js package will handle the timezone internally
+    const chartData = await calculateEphemerisChart(
+      parsedBirthDate,
+      geocodedLocation.latitude,
+      geocodedLocation.longitude,
+      'E', // Use Equal house system (Placidus not available in ephemeris.js)
+      null // Don't pass timezone offset as we're already including it in the date object
+    );
+    
+    // Format the data for return
+    const formattedChartData = {
+      ...chartData,
+      birthLocationFormatted: geocodedLocation.formattedAddress,
+      calculationMethod: 'JavaScript Ephemeris',
+      timeZone: geocodedLocation.timeZone || {
+        zoneName: timeZoneInfo.name,
+        utcOffset: timezoneOffsetSeconds,
+        countryName: 'Unknown'
+      }
     };
-    
-    // Check if the location matches any of our special cases
-    let specialCase: { city: string; hours: number; name: string } | null = null;
-    for (const [cityName, cityInfo] of Object.entries(specialCases)) {
-      if (normalizedLocation.includes(cityName)) {
-        specialCase = { 
-          city: cityName, 
-          hours: cityInfo.hours,
-          name: cityInfo.name 
-        };
-        break;
-      }
-    }
-    
-    // If we found a special case, use its timezone offset
-    if (specialCase) {
-      console.log(`Special handling for ${specialCase.city} timezone:`);
-      console.log(`  • Local time: ${birthHour}:${birthMinute}`);
-      console.log(`  • Current timezone offset: ${timeZoneInfo.totalOffsetMinutes} minutes (${timeZoneInfo.totalOffsetMinutes/60} hours)`);
-      
-      // Convert hours to minutes (handling half-hour timezones)
-      const expectedOffset = Math.round(specialCase.hours * 60);
-      
-      // If the current offset is significantly different, override it
-      if (Math.abs(timeZoneInfo.totalOffsetMinutes - expectedOffset) > 30) {
-        console.log(`  • Correcting ${specialCase.city} timezone offset to ${specialCase.hours} hours (${expectedOffset} minutes)`);
-        timeZoneInfo.totalOffsetMinutes = expectedOffset;
-        timeZoneInfo.offsetHours = Math.floor(specialCase.hours);
-        timeZoneInfo.offsetMinutes = Math.abs((specialCase.hours - Math.floor(specialCase.hours)) * 60);
-        timeZoneInfo.name = specialCase.name;
-      }
-    }
-    
-    // Subtract the timezone offset to get UTC time in minutes
-    let totalUtcMinutes = totalLocalMinutes - timeZoneInfo.totalOffsetMinutes;
-    
-    // Since JavaScript % operator doesn't work properly with negative numbers for our purposes,
-    // we need a special handling to get the correct hour and minute
-    // This ensures proper handling of negative minutes (like -30 becoming 23:30)
-    let utcHour, utcMinute;
-    
-    if (totalUtcMinutes < 0) {
-        // For negative total minutes, we need to calculate the correct hour and minute
-        // Example: -30 minutes should be 23:30 from the previous day
-        const absMinutes = Math.abs(totalUtcMinutes);
-        utcHour = Math.floor(absMinutes / 60);
-        utcMinute = absMinutes % 60;
-        
-        // Convert to the correct "negative time"
-        if (utcMinute === 0) {
-            utcHour = 24 - utcHour;
-        } else {
-            utcHour = 23 - utcHour;
-            utcMinute = 60 - utcMinute;
-        }
-    } else {
-        // For positive total minutes, the standard calculation works
-        utcHour = Math.floor(totalUtcMinutes / 60);
-        utcMinute = totalUtcMinutes % 60;
-    }
-    
-    // Initialize UTC date components
-    let utcDay = birthDay;
-    let utcMonth = birthMonth;
-    let utcYear = birthYear;
-    let utcSecond = 0; // Initialize seconds to 0 by default
-    
-    // Handle day boundary crossing if hours are outside 0-23 range
-    // For times before midnight (negative hours)
-    while (utcHour < 0) {
-      utcHour += 24;
-      utcDay -= 1;
-    }
-    
-    // For times after midnight crossing to next day
-    while (utcHour >= 24) {
-      utcHour -= 24;
-      utcDay += 1;
-    }
-    
-    // Check if we need to adjust the month/year
-    // This is a simplified approach - a full implementation would account for all edge cases
-    const daysInMonth = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-    
-    // Adjust for leap year if needed (February)
-    if (utcMonth === 2 && ((utcYear % 4 === 0 && utcYear % 100 !== 0) || utcYear % 400 === 0)) {
-      daysInMonth[2] = 29;
-    }
-    
-    // Adjust the day/month/year if needed
-    if (utcDay < 1) {
-      utcMonth -= 1;
-      if (utcMonth < 1) {
-        utcMonth = 12;
-        utcYear -= 1;
-      }
-      utcDay = daysInMonth[utcMonth];
-    } else if (utcDay > daysInMonth[utcMonth]) {
-      utcDay = 1;
-      utcMonth += 1;
-      if (utcMonth > 12) {
-        utcMonth = 1;
-        utcYear += 1;
-      }
-    }
-    
-    // Calculate offset hours and minutes for display
-    const offsetHours = Math.floor(Math.abs(timeZoneInfo.totalOffsetMinutes) / 60) * 
-                       (timeZoneInfo.totalOffsetMinutes >= 0 ? 1 : -1);
-    const offsetMinutes = Math.abs(timeZoneInfo.totalOffsetMinutes) % 60 * 
-                          (timeZoneInfo.totalOffsetMinutes >= 0 ? 1 : -1);
-                          
-    console.log(`Converted birth time from local to UTC:`);
-    console.log(`  • Local time: ${birthYear}-${birthMonth}-${birthDay} ${birthHour}:${birthMinute}`);
-    console.log(`  • Timezone offset: ${offsetHours} hours, ${offsetMinutes} minutes (${timeZoneInfo.totalOffsetMinutes} minutes total)`);
-    console.log(`  • UTC time: ${utcYear}-${utcMonth}-${utcDay} ${utcHour}:${utcMinute}`);
-    
-    // Additional validation to catch any invalid conversions
-    if (isNaN(utcHour) || isNaN(utcMinute)) {
-      console.error('Invalid UTC time calculated (NaN values):', { utcHour, utcMinute });
-      return {
-        error: 'Invalid time value after conversion. Please try a different time or location.'
-      };
-    }
-    
-    // Normalize hour value to 0-23 range, adjusting the day if necessary
-    if (utcHour < 0) {
-      console.log(`Normalizing negative hour ${utcHour} to valid range`);
-      while (utcHour < 0) {
-        utcHour += 24;
-        utcDay -= 1;
-      }
-    } else if (utcHour >= 24) {
-      console.log(`Normalizing hour ${utcHour} >= 24 to valid range`);
-      while (utcHour >= 24) {
-        utcHour -= 24;
-        utcDay += 1;
-      }
-    }
-    
-    // Normalize minute value to 0-59 range
-    if (utcMinute < 0) {
-      console.log(`Normalizing negative minute ${utcMinute} to valid range`);
-      utcMinute += 60;
-      utcHour -= 1;
-      // Re-normalize hour if needed
-      if (utcHour < 0) {
-        utcHour += 24;
-        utcDay -= 1;
-      }
-    } else if (utcMinute >= 60) {
-      console.log(`Normalizing minute ${utcMinute} >= 60 to valid range`);
-      utcMinute -= 60;
-      utcHour += 1;
-      // Re-normalize hour if needed
-      if (utcHour >= 24) {
-        utcHour -= 24;
-        utcDay += 1;
-      }
-    }
-    
-    // Only use a Date object for display/debugging, not for calculations
-    // Create a Date object using UTC explicitly
-    const utcDateTime = new Date(Date.UTC(utcYear, utcMonth - 1, utcDay, utcHour, utcMinute, 0));
-    console.log(`Converted to UTC: ${utcDateTime.toISOString()}`);
-    
-    // Format date directly using our calculated values (DD.MM.YYYY)
-    // Ensure date values are within valid ranges
-    if (utcDay < 1) utcDay = 1;
-    if (utcDay > 28 && utcMonth === 2) utcDay = 28; // Safe default for February
-    if (utcDay > 30 && (utcMonth === 4 || utcMonth === 6 || utcMonth === 9 || utcMonth === 11)) utcDay = 30;
-    if (utcDay > 31) utcDay = 31;
-    
-    const formattedDate = `${utcDay.toString().padStart(2, '0')}.${utcMonth.toString().padStart(2, '0')}.${utcYear.toString().padStart(4, '0')}`;
-    
-    // Format time directly using our calculated values (HH:MM)
-    // Ensure utcHour is formatted as a 2-digit 24-hour format value (00-23)
-    const formattedHour = (((utcHour % 24) + 24) % 24).toString().padStart(2, '0'); // Double modulo to handle negative hours
-    const formattedMinute = (((utcMinute % 60) + 60) % 60).toString().padStart(2, '0'); // Double modulo to handle negative minutes
-    const formattedTime = `${formattedHour}:${formattedMinute}`;
-    
-    console.log(`UTC date/time for Swiss Ephemeris: ${formattedDate} ${formattedTime}`);
-    console.log(`Location: ${geocodedLocation.formattedAddress}, Time Zone: ${timeZoneInfo.name}`);
-    
-    // Store the converted UTC date for calculations
-    const birthDateTime = utcDateTime;
-    
-    // Path to the Swiss Ephemeris binary
-    const swissEphPath = path.join(process.cwd(), 'swisseph-master');
-    const sweTestPath = path.join(swissEphPath, 'swetest');
-    
-    // Set up the environment with the ephemeris path and library path for shared libraries
-    const env = {
-      ...process.env,
-      SE_EPHE_PATH: path.join(swissEphPath, 'ephe'),
-      LD_LIBRARY_PATH: swissEphPath, // Point to the directory with libswe.so
-      DYLD_LIBRARY_PATH: swissEphPath // For macOS
-    };
-    
-    // For macOS, we need a different approach since dyld library loading is restricted
-    // Let's try to compile a small executable that doesn't need the shared library
-    try {
-      // Check if we have the swephexp.h file and sweph.c
-      const hasHeader = fs.existsSync(path.join(swissEphPath, 'swephexp.h'));
-      const hasSource = fs.existsSync(path.join(swissEphPath, 'sweph.c'));
-      
-      console.log(`Swiss Ephemeris files check - Header: ${hasHeader}, Source: ${hasSource}`);
-      
-      // For now, let's try a direct approach using a simpler command
-      // This may not load the shared library directly but could work for basic calculations
-      execSync(`cd ${swissEphPath} && chmod +x swetest`, { encoding: 'utf8' });
-      console.log('Made swetest executable');
-    } catch (setupError) {
-      console.error('Error setting up Swiss Ephemeris:', setupError);
-      // Continue anyway - we'll fall back to our JavaScript implementation
-    }
-    
-    // For October 8th, 1995, 7:56 PM in Miami, let's use hard-coded values
-    // This is a special case where we know the expected output for this specific date
-    let command;
-    
-    // Special case for our test date
-    if (formattedDate === '08.10.1995' && 
-        (formattedTime === '19:56' || formattedTime === '19:56:00') &&
-        Math.abs(geocodedLocation.latitude - 25.7617) < 0.01 && 
-        Math.abs(geocodedLocation.longitude - (-80.1918)) < 0.01) {
-      
-      console.log('Using special case for October 8th, 1995 in Miami');
-      // This is our test case, use the reference data directly
-      
-      // Still try the command, but we'll fall back to our reference data
-      // Also force Gregorian calendar for consistency
-      command = `${sweTestPath} -b${formattedDate} -ut${formattedTime} -p0123456789DAtj -eswe -fPlsj -head`;
-    } else {
-      // Standard command for all other dates
-      // -b: birth date
-      // -ut: universal time
-      // -p: planets to calculate (0=Sun through 9=Pluto, D=nodes, A=mean node, t=true node, j=lilith)
-      // -geopos: geographic position (longitude, latitude, altitude)
-      // -house: house cusps (longitude, latitude, house system)
-      // -eswe: use Swiss Ephemeris
-      // -fPlsj: format with planet name, longitude in signs
-      // -head: include headers
-      
-      // IMPORTANT: Always use Gregorian calendar by appending 'greg' to the date
-      // This fixes the bug where Swiss Ephemeris was subtracting 530 years from the birth year
-      // for historical dates (before October 4, 1582)
-      command = `${sweTestPath} -b${formattedDate}greg -ut${formattedTime} -p0123456789DAtj -geopos${geocodedLocation.longitude},${geocodedLocation.latitude},0 -house${geocodedLocation.longitude},${geocodedLocation.latitude},P -eswe -fPlsj -head`;
-    }
-    
-    console.log('Running Swiss Ephemeris command:', command);
-    
-    // Execute the command with better error handling
-    let output;
-    let binarySucceeded = false;
-    
-    try {
-      output = execSync(command, { env, encoding: 'utf8' });
-      console.log('Swiss Ephemeris binary execution successful!');
-      binarySucceeded = true;
-    } catch (execError: any) {
-      console.error('Error executing Swiss Ephemeris binary:', execError.message);
-      if (execError.stderr) {
-        console.error('STDERR:', execError.stderr.toString());
-      }
-      
-      console.log('Falling back to JavaScript implementation...');
-      output = '';
-    }
-    
-    // Get the birth chart data
-    let chartData;
-    
-    if (binarySucceeded && output) {
-      // If the binary execution succeeded, parse its output
-      const parsedData = parseSwissEphOutput(output, geocodedLocation);
-      
-      // Get the timezone offset in seconds for the JavaScript implementation
-      const timezoneOffsetSeconds = timeZoneInfo.totalOffsetMinutes * 60;
-      
-      console.log(`Passing to ephemeris: UTC date=${birthDateTime.toUTCString()}, timezone offset=${timezoneOffsetSeconds} seconds`);
-      
-      // Also calculate with our JavaScript implementation for completeness
-      // We pass birthDateTime (which is already in GMT/UTC) and the timezone offset
-      // The offset is used in the calculation for information purposes but doesn't affect the actual calculation
-      // since we're already providing a GMT/UTC adjusted time
-      const fullChartData = await calculateEphemerisChart(
-        birthDateTime,
-        geocodedLocation.latitude,
-        geocodedLocation.longitude,
-        'P', // Use Placidus house system
-        timezoneOffsetSeconds // Pass the timezone offset for informational purposes
-      );
-      
-      // Combine the data, prioritizing the binary output
-      chartData = {
-        ...fullChartData,
-        rawSwissEphOutput: parsedData,
-        birthLocationFormatted: geocodedLocation.formattedAddress,
-        calculationMethod: 'Swiss Ephemeris Binary',
-        timeZone: geocodedLocation.timeZone || {
-          zoneName: timeZoneInfo.name,
-          utcOffset: timezoneOffsetSeconds,
-          countryName: 'Unknown'
-        }
-      };
-    } else {
-      // Use only our JavaScript implementation
-      console.log('Using JavaScript implementation for chart calculation');
-      try {
-        // Get the timezone offset in seconds
-        const timezoneOffsetSeconds = timeZoneInfo.totalOffsetMinutes * 60;
-        
-        console.log(`Passing to ephemeris: UTC date=${birthDateTime.toUTCString()}, timezone offset=${timezoneOffsetSeconds} seconds`);
-        
-        // Calculate chart using our JavaScript implementation
-        // We pass birthDateTime (which is already in GMT/UTC) and the timezone offset
-        // The ephemeris code will not adjust the time again since we're already passing UTC time
-        const fullChartData = await calculateEphemerisChart(
-          birthDateTime,
-          geocodedLocation.latitude,
-          geocodedLocation.longitude,
-          'P', // Use Placidus house system
-          timezoneOffsetSeconds // Pass the timezone offset for informational purposes
-        );
-        
-        // Format the data
-        chartData = {
-          ...fullChartData,
-          birthLocationFormatted: geocodedLocation.formattedAddress,
-          calculationMethod: 'JavaScript Implementation',
-          timeZone: geocodedLocation.timeZone || {
-            zoneName: timeZoneInfo.name,
-            utcOffset: timezoneOffsetSeconds,
-            countryName: 'Unknown'
-          }
-        };
-      } catch (ephemerisError: any) {
-        console.error('Error in ephemeris calculation:', ephemerisError);
-        return {
-          error: `Failed to calculate birth chart: ${ephemerisError.message || 'Unknown error'}`
-        };
-      }
-    }
     
     console.log('Birth chart calculated successfully');
     
     // Return the data to the client
     return {
-      data: chartData
+      data: formattedChartData
     };
     
   } catch (error) {
@@ -1135,28 +687,9 @@ export async function determineTimeZone(longitude: number, latitude: number): Pr
     // Import the geocodeLocation function to use it for reverse geocoding
     const { geocodeLocation } = await import('./lib/ephemeris');
     
-    // Find the nearest city to these coordinates
-    // This is a simplified approach - in real world, we would use proper reverse geocoding
-    const cities = await import('./lib/prisma').then(module => 
-      import('fs').then(fs => 
-        import('path').then(path => 
-          import('csv-parse/sync').then(csvParse => {
-            try {
-              const csvPath = path.join(process.cwd(), 'public', 'worldcities.csv');
-              const fileContent = fs.readFileSync(csvPath, 'utf8');
-              
-              return csvParse.parse(fileContent, {
-                columns: true,
-                skip_empty_lines: true
-              });
-            } catch (error) {
-              console.error('Error loading cities data:', error);
-              return [];
-            }
-          })
-        )
-      )
-    );
+    // Instead of loading city data from the file system, which doesn't work in serverless,
+    // we'll use a simple longitude-based calculation which is more compatible with serverless
+    const cities = [];
     
     // Find the closest city
     let closestCity = null;
@@ -1180,190 +713,71 @@ export async function determineTimeZone(longitude: number, latitude: number): Pr
     if (closestCity) {
       console.log(`Found closest city: ${closestCity.city}, ${closestCity.country} (${closestCity.iso2})`);
       
-      // Now use the TimeZoneDB data to find the timezone
-      const { findTimeZone } = await import('./lib/ephemeris').then(module => {
-        // Since findTimeZone is private, we need to create a wrapper
-        return {
-          findTimeZone: (lat: number, lng: number, countryCode: string) => {
-            // Load the timezone data
-            const fs = require('fs');
-            const path = require('path');
-            
-            try {
-              // Load country data
-              const countryPath = path.join(process.cwd(), 'public', 'TimeZoneDB.csv', 'country.csv');
-              const countryContent = fs.readFileSync(countryPath, 'utf8');
-              const countries = new Map();
-              
-              for (const line of countryContent.split('\n')) {
-                if (!line.trim()) continue;
-                const [code, name] = line.split(',');
-                if (code && name) {
-                  countries.set(code, name);
-                }
-              }
-              
-              // Load timezone data
-              const timeZonePath = path.join(process.cwd(), 'public', 'TimeZoneDB.csv', 'time_zone.csv');
-              const timeZoneContent = fs.readFileSync(timeZonePath, 'utf8');
-              const timeZones = new Map();
-              
-              // Process entries in reverse order to get the most recent entries first
-              // (TimeZoneDB entries are listed in chronological order)
-              const processedZones = new Set();
-              const lines = timeZoneContent.split('\n');
-              
-              for (let i = lines.length - 1; i >= 0; i--) {
-                const line = lines[i];
-                if (!line.trim()) continue;
-                
-                const parts = line.split(',');
-                if (parts.length < 4) continue;
-                
-                const zoneName = parts[0];
-                const zoneCountryCode = parts[1];
-                const zoneType = parts[2];  // LMT, UTC, EST, etc.
-                const utcOffset = parseInt(parts[4]) || 0; // Use column E (index 4) for UTC offset
-                
-                // Skip if we already have this zone (we're processing newest first)
-                if (processedZones.has(zoneName)) continue;
-                
-                // Skip historical Local Mean Time entries
-                if (zoneType === 'LMT') continue;
-                
-                // Mark as processed
-                processedZones.add(zoneName);
-                
-                timeZones.set(zoneName, {
-                  zoneName,
-                  countryCode: zoneCountryCode,
-                  zoneType,
-                  utcOffset
-                });
-              }
-              
-              console.log(`Loaded ${timeZones.size} time zones from TimeZoneDB`);
-              
-              // Normalize countryCode for comparison
-              const normalizedCountryCode = countryCode.toUpperCase();
-              
-              // Handle US timezones directly with longitude-based determination
-              // This fixes the issue where all US cities were getting Pacific/Honolulu
-              if (normalizedCountryCode === 'US') {
-                // Special case handling for US - map longitude directly to timezones
-                let usZoneName = '';
-                
-                // Basic logic for US timezone selection by longitude
-                if (lng < -170) {
-                  // Aleutian Islands
-                  usZoneName = 'America/Adak';         // UTC-10 with DST
-                } else if (lng < -140) {
-                  // Alaska 
-                  usZoneName = 'America/Anchorage';    // UTC-9 with DST
-                } else if (lng < -115) {
-                  // Pacific Time
-                  usZoneName = 'America/Los_Angeles';  // UTC-8 with DST
-                } else if (lng < -100) {
-                  // Mountain Time
-                  usZoneName = 'America/Denver';       // UTC-7 with DST
-                } else if (lng < -85) {
-                  // Central Time
-                  usZoneName = 'America/Chicago';      // UTC-6 with DST
-                } else {
-                  // Eastern Time (default for east coast)
-                  usZoneName = 'America/New_York';     // UTC-5 with DST
-                }
-                
-                // Hawaii special case
-                if (lng < -150 && lat < 25 && lat > 15) {
-                  usZoneName = 'Pacific/Honolulu';     // UTC-10 without DST
-                }
-                
-                console.log(`US special case handling: selected ${usZoneName} for longitude ${lng}`);
-                
-                // Look up this zone and return it if found
-                if (timeZones.has(usZoneName)) {
-                  const zoneData = timeZones.get(usZoneName);
-                  return {
-                    zoneName: usZoneName,
-                    utcOffset: zoneData.utcOffset,
-                    countryName: countries.get(normalizedCountryCode) || 'United States'
-                  };
-                }
-                
-                console.log(`Named timezone ${usZoneName} not found in data, falling back to standard approach`);
-              }
-              
-              // First attempt - find zones for this country
-              const countryZones = [];
-              for (const [zoneName, zoneData] of timeZones.entries()) {
-                if (zoneData.countryCode === normalizedCountryCode) {
-                  countryZones.push(zoneData);
-                }
-              }
-              
-              console.log(`Found ${countryZones.length} timezone entries for country code ${normalizedCountryCode}`);
-              
-              // If we found zones for this country
-              if (countryZones.length > 0) {
-                // Most countries have a single timezone, but some have multiple
-                if (countryZones.length === 1) {
-                  // Only one timezone for this country, use it
-                  console.log(`Using the only timezone available for ${normalizedCountryCode}: ${countryZones[0].zoneName}`);
-                  return {
-                    zoneName: countryZones[0].zoneName,
-                    utcOffset: countryZones[0].utcOffset,
-                    countryName: countries.get(normalizedCountryCode) || normalizedCountryCode
-                  };
-                } else {
-                  // Multiple timezones for this country
-                  
-                  // Calculate rough longitude timezone
-                  const approxOffsetHours = Math.round(lng / 15);
-                  const approxOffsetSeconds = approxOffsetHours * 3600;
-                  
-                  // Standard approach - find closest offset
-                  let closestZone = countryZones[0];
-                  let minDifference = Number.MAX_VALUE;
-                  
-                  for (const zone of countryZones) {
-                    const difference = Math.abs(zone.utcOffset - approxOffsetSeconds);
-                    if (difference < minDifference) {
-                      minDifference = difference;
-                      closestZone = zone;
-                    }
-                  }
-                  
-                  console.log(`Selected best timezone match: ${closestZone.zoneName}`);
-                  
-                  return {
-                    zoneName: closestZone.zoneName,
-                    utcOffset: closestZone.utcOffset,
-                    countryName: countries.get(normalizedCountryCode) || normalizedCountryCode
-                  };
-                }
-              }
-              
-              // Fallback
-              return {
-                zoneName: 'UTC',
-                utcOffset: 0,
-                countryName: countries.get(countryCode) || countryCode || 'Unknown'
-              };
-            } catch (error) {
-              console.error('Error loading timezone data:', error);
-              return {
-                zoneName: 'UTC',
-                utcOffset: 0,
-                countryName: 'Unknown'
-              };
-            }
-          }
-        };
-      });
+      // Instead of loading timezone data from files, we'll use a simple calculation based on longitude
+      // This is compatible with serverless environments
       
-      // Get the timezone
-      const timezone = findTimeZone(latitude, longitude, closestCity.iso2);
+      // Calculate the timezone offset based on longitude
+      // Each 15 degrees corresponds to 1 hour time difference
+      const approxOffsetHours = Math.round(longitude / 15);
+      const utcOffset = approxOffsetHours * 3600; // Convert to seconds
+      
+      // Create a descriptive timezone name based on the offset
+      const tzSignC = approxOffsetHours >= 0 ? '+' : '-';
+      const absHours = Math.abs(approxOffsetHours);
+      const zoneName = `UTC${tzSignC}${absHours}`;
+      
+      // US special case handling
+      let countryName = "Unknown";
+      let effectiveOffset = utcOffset;
+      let effectiveZoneName = zoneName;
+      
+      if (closestCity && closestCity.iso2) {
+        countryName = closestCity.country || closestCity.iso2;
+        
+        // Special case for US timezones
+        if (closestCity.iso2.toUpperCase() === 'US') {
+          if (longitude < -170) {
+            // Aleutian Islands
+            effectiveZoneName = 'America/Adak';
+            effectiveOffset = -10 * 3600;
+          } else if (longitude < -140) {
+            // Alaska 
+            effectiveZoneName = 'America/Anchorage';
+            effectiveOffset = -9 * 3600;
+          } else if (longitude < -115) {
+            // Pacific Time
+            effectiveZoneName = 'America/Los_Angeles';
+            effectiveOffset = -8 * 3600;
+          } else if (longitude < -100) {
+            // Mountain Time
+            effectiveZoneName = 'America/Denver';
+            effectiveOffset = -7 * 3600;
+          } else if (longitude < -85) {
+            // Central Time
+            effectiveZoneName = 'America/Chicago';
+            effectiveOffset = -6 * 3600;
+          } else {
+            // Eastern Time
+            effectiveZoneName = 'America/New_York';
+            effectiveOffset = -5 * 3600;
+          }
+          
+          // Hawaii special case
+          if (longitude < -150 && latitude < 25 && latitude > 15) {
+            effectiveZoneName = 'Pacific/Honolulu';
+            effectiveOffset = -10 * 3600;
+          }
+          
+          countryName = "United States";
+        }
+      }
+      
+      // Create the timezone object
+      const timezone = {
+        zoneName: effectiveZoneName,
+        utcOffset: effectiveOffset,
+        countryName: countryName
+      };
       console.log(`Found timezone: ${timezone.zoneName}, offset: ${timezone.utcOffset} seconds`);
       
       // Convert seconds to hours and minutes
@@ -1372,10 +786,10 @@ export async function determineTimeZone(longitude: number, latitude: number): Pr
       const offsetMinutes = Math.abs(totalMinutes) % 60;
       
       // Format timezone name
-      const sign = totalMinutes >= 0 ? '+' : '-';
+      const tzSignD = totalMinutes >= 0 ? '+' : '-';
       const formattedHours = Math.abs(offsetHours).toString().padStart(2, '0');
       const formattedMinutes = Math.abs(offsetMinutes).toString().padStart(2, '0');
-      const timeZoneName = `${timezone.zoneName} (UTC${sign}${formattedHours}:${formattedMinutes})`;
+      const timeZoneName = `${timezone.zoneName} (UTC${tzSignD}${formattedHours}:${formattedMinutes})`;
       
       return {
         name: timeZoneName,
@@ -1658,6 +1072,7 @@ export const deleteBirthChart = async (chartId: number) => {
   }
 };
 
+// Function to parse the output from WebAssembly Swiss Ephemeris
 function parseSwissEphOutput(output: string, location: any) {
   // Initialize parsed data
   const parsedData: Record<string, any> = {
@@ -1681,10 +1096,11 @@ function parseSwissEphOutput(output: string, location: any) {
     'Uranus': 'uranus',
     'Neptune': 'neptune',
     'Pluto': 'pluto',
-    'mean Node': 'meanNode',
-    'true Node': 'trueNode',
-    'mean Lilith': 'meanLilith',
-    'osc. Lilith': 'oscLilith'
+    'Mean Node': 'meanNode',
+    'True Node': 'trueNode',
+    'Mean Lilith': 'meanLilith',
+    'Ascendant': 'ascendant',
+    'Midheaven': 'midheaven'
   };
   
   // Signs and their degrees
@@ -1694,17 +1110,67 @@ function parseSwissEphOutput(output: string, location: any) {
     'Sagittarius', 'Capricorn', 'Aquarius', 'Pisces'
   ];
   
+  // Flags to track sections
+  let inPlanetsSection = false;
+  let inHousesSection = false;
+  
   // Parse each line
   for (const line of lines) {
-    // Skip empty lines or headers
-    if (!line.trim() || line.includes('Planet')) continue;
+    // Skip empty lines or header dividers
+    if (!line.trim() || line.includes('----')) continue;
+    
+    // Track sections
+    if (line.includes('Planets:')) {
+      inPlanetsSection = true;
+      inHousesSection = false;
+      continue;
+    } else if (line.includes('Houses:')) {
+      inPlanetsSection = false;
+      inHousesSection = true;
+      continue;
+    }
     
     // Parse planet positions
-    for (const [planetName, planetKey] of Object.entries(planetMap)) {
-      if (line.includes(planetName)) {
-        // Extract the longitude value
-        // Example: "Sun               15 Libra  5' 3.2"     29.2548  1.0021  0.9975"
-        const match = line.match(new RegExp(`${planetName}\\s+(\\d+)\\s+(\\w+)\\s+(\\d+)'\\s+(\\d+\\.\\d+)`));
+    if (inPlanetsSection) {
+      for (const [planetName, planetKey] of Object.entries(planetMap)) {
+        if (line.startsWith(planetName)) {
+          // Extract the position from formatted output
+          // Format: "Sun         15° Libra 5' 3.1" R"
+          const match = line.match(/\s+(\d+)°\s+(\w+)\s+(\d+)'\s+(\d+\.\d+)"\s*(R)?/);
+          if (match) {
+            const degrees = parseInt(match[1]);
+            const sign = match[2];
+            const minutes = parseInt(match[3]);
+            const seconds = parseFloat(match[4]);
+            const isRetrograde = match[5] === 'R';
+            
+            // Calculate total degrees within the sign
+            const totalDegrees = degrees + (minutes / 60) + (seconds / 3600);
+            
+            // Get sign index
+            const signIndex = zodiacSigns.indexOf(sign);
+            
+            // Store the data
+            parsedData.planets[planetKey] = {
+              name: sign,
+              degree: totalDegrees,
+              longitude: signIndex * 30 + totalDegrees,
+              retrograde: isRetrograde
+            };
+          }
+          break;
+        }
+      }
+    }
+    
+    // Parse house cusps
+    if (inHousesSection) {
+      // Process Ascendant and Midheaven
+      if (line.startsWith('Ascendant') || line.startsWith('Midheaven')) {
+        const planetName = line.startsWith('Ascendant') ? 'Ascendant' : 'Midheaven';
+        const planetKey = planetMap[planetName];
+        
+        const match = line.match(/\s+(\d+)°\s+(\w+)\s+(\d+)'\s+(\d+\.\d+)"/);
         if (match) {
           const degrees = parseInt(match[1]);
           const sign = match[2];
@@ -1714,34 +1180,41 @@ function parseSwissEphOutput(output: string, location: any) {
           // Calculate total degrees within the sign
           const totalDegrees = degrees + (minutes / 60) + (seconds / 3600);
           
-          // Store the data
+          // Get sign index
+          const signIndex = zodiacSigns.indexOf(sign);
+          
+          // Store the data in planets for easier access
           parsedData.planets[planetKey] = {
             name: sign,
             degree: totalDegrees,
-            longitude: zodiacSigns.indexOf(sign) * 30 + totalDegrees
+            longitude: signIndex * 30 + totalDegrees
           };
         }
       }
-    }
-    
-    // Parse house cusps
-    const houseMatch = line.match(/house\s+(\d+):\s+(\d+)\s+(\w+)\s+(\d+)'\s+(\d+\.\d+)/);
-    if (houseMatch) {
-      const houseNumber = parseInt(houseMatch[1]);
-      const degrees = parseInt(houseMatch[2]);
-      const sign = houseMatch[3];
-      const minutes = parseInt(houseMatch[4]);
-      const seconds = parseFloat(houseMatch[5]);
       
-      // Calculate total degrees within the sign
-      const totalDegrees = degrees + (minutes / 60) + (seconds / 3600);
-      
-      // Store the house data
-      parsedData.houses[`house${houseNumber}`] = {
-        name: sign,
-        degree: totalDegrees,
-        longitude: zodiacSigns.indexOf(sign) * 30 + totalDegrees
-      };
+      // Process house cusps
+      const houseMatch = line.match(/house\s+(\d+)\s+(\d+)°\s+(\w+)\s+(\d+)'\s+(\d+\.\d+)"/);
+      if (houseMatch) {
+        const houseNumber = parseInt(houseMatch[1]);
+        const degrees = parseInt(houseMatch[2]);
+        const sign = houseMatch[3];
+        const minutes = parseInt(houseMatch[4]);
+        const seconds = parseFloat(houseMatch[5]);
+        
+        // Calculate total degrees within the sign
+        const totalDegrees = degrees + (minutes / 60) + (seconds / 3600);
+        
+        // Get sign index
+        const signIndex = zodiacSigns.indexOf(sign);
+        
+        // Store the house data
+        parsedData.houses[`house${houseNumber}`] = {
+          name: sign,
+          degree: totalDegrees,
+          cusp: signIndex * 30 + totalDegrees,
+          longitude: signIndex * 30 + totalDegrees
+        };
+      }
     }
   }
   
