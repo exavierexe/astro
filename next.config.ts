@@ -10,7 +10,8 @@ const nextConfig: NextConfig = {
     ],
   },
   // Allow ephemeris module to be bundled correctly
-  transpilePackages: ['ephemeris'],
+  // Ensure proper transpilation of ephemeris and our wrapper modules
+  transpilePackages: ['ephemeris', './lib/ephemeris-wrapper', './lib/server-ephemeris'],
   // Properly handle CommonJS modules
   webpack: (config, { isServer }) => {
     // Add support for CommonJS modules

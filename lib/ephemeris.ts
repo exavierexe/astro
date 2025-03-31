@@ -3,8 +3,8 @@ import path from 'path';
 import fs from 'fs';
 import { parse } from 'csv-parse/sync';
 
-// Import our ephemeris wrapper to avoid TypeScript issues
-const ephemerisJs = require('./ephemeriswrapper');
+// Import our robust wrapper that works in both client and server environments
+const ephemerisJs = require('./ephemeris-wrapper');
 
 // Constants
 const ZODIAC_SIGNS = [
@@ -1001,6 +1001,9 @@ export async function calculateBirthChart(
   }
   
   try {
+    // Use the ephemerisJs wrapper that was already imported at the top
+    // The wrapper handles all the fallbacks internally
+    
     // When using ephemeris.js, the Date object should already have timezone information
     // No need for manual adjustment since the Date object internally stores time in UTC
     console.log(`Using date for ephemeris calculation: ${birthDate.toISOString()}`);

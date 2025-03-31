@@ -54,12 +54,6 @@ export function MainNav() {
       href: "/library",
       icon: <Book className="w-5 h-5 mr-2" />,
     },
-    {
-      title: "Account",
-      href: "/account",
-      icon: <User className="w-5 h-5 mr-2" />,
-      requiresAuth: true,
-    },
   ];
   
   return (

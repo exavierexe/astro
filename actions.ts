@@ -276,9 +276,10 @@ export const querySwissEph = async (params: {
     console.log(`Parsed Date object: ${dateObj.toString()}`);
     console.log(`UTC time: ${dateObj.toUTCString()}`);
     
-    // Now use the pure JavaScript ephemeris package to calculate planet positions
-    // Use our wrapper to avoid TypeScript issues
-    const ephemerisJs = require('./lib/ephemeriswrapper');
+    // Use our robust wrapper for ephemeris calculations in serverless environments
+    // This will automatically handle fallbacks if the module isn't available
+    // For server components/actions, we use the server-side implementation
+    const ephemerisJs = require('./lib/server-ephemeris');
     
     // Calculate the positions using ephemeris.js
     const result = ephemerisJs.getAllPlanets(
